@@ -29,13 +29,12 @@ from whoosh.fields import Schema, ID, IDLIST, STORED, TEXT, KEYWORD, NUMERIC, BO
 from whoosh import index
 from whoosh.qparser import QueryParser
 from whoosh.filedb.filestore import FileStorage, RamStorage
-from whoosh.searching import ResultsPage
 from whoosh.spelling import SpellChecker
 from whoosh.writing import AsyncWriter
 
 # Handle minimum requirement.
-if not hasattr(whoosh, '__version__') or whoosh.__version__ < (1, 1, 1):
-    raise MissingDependency("The 'whoosh' backend requires version 1.1.1 or greater.")
+if not hasattr(whoosh, '__version__') or whoosh.__version__ < (0, 3, 18):
+    raise MissingDependency("The 'whoosh' backend requires version 0.3.18 or greater.")
 
 
 DATETIME_REGEX = re.compile('^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})T(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(\.\d{3,6}Z?)?$')
@@ -126,10 +125,14 @@ class SearchBackend(BaseSearchBackend):
                     schema_fields[field_class.index_fieldname] = IDLIST(stored=True)
                 else:
                     schema_fields[field_class.index_fieldname] = KEYWORD(stored=True, commas=True, scorable=True)
-            elif isinstance(field_class, (DateField, DateTimeField)):
-                schema_fields[field_class.index_fieldname] = DATETIME(stored=field_class.stored)
-            elif isinstance(field_class, BooleanField):
-                schema_fields[field_class.index_fieldname] = BOOLEAN(stored=field_class.stored)
+            # FIXME: Someday maybe these FieldTypes won't throw initialization
+            #        errors (0.3.18). Should that day ever arrive, uncomment
+            #        these.
+            #        Also get the values in ``_from_python``.
+            # elif isinstance(field_class, (DateField, DateTimeField)):
+            #     schema_fields[field_class.index_fieldname] = DATETIME(stored=field_class.stored)
+            # elif isinstance(field_class, BooleanField):
+            #     schema_fields[field_class.index_fieldname] = BOOLEAN(stored=field_class.stored)
             elif isinstance(field_class, (DateField, DateTimeField, BooleanField)):
                 if field_class.indexed is False:
                     schema_fields[field_class.index_fieldname] = STORED
@@ -157,7 +160,7 @@ class SearchBackend(BaseSearchBackend):
             self.setup()
         
         self.index = self.index.refresh()
-        writer = AsyncWriter(self.index)
+        writer = AsyncWriter(self.index.writer, postlimit=self.post_limit)
         
         for obj in iterable:
             doc = index.full_prepare(obj)
@@ -185,6 +188,9 @@ class SearchBackend(BaseSearchBackend):
         self.index = self.index.refresh()
         whoosh_id = get_identifier(obj_or_string)
         self.index.delete_by_query(q=self.parser.parse(u'id:"%s"' % whoosh_id))
+        
+        # For now, commit no matter what, as we run into locking issues otherwise.
+        self.index.commit()
     
     def clear(self, models=[], commit=True):
         if not self.setup_complete:
@@ -201,6 +207,9 @@ class SearchBackend(BaseSearchBackend):
                 models_to_delete.append(u"django_ct:%s.%s" % (model._meta.app_label, model._meta.module_name))
             
             self.index.delete_by_query(q=self.parser.parse(u" OR ".join(models_to_delete)))
+        
+        # For now, commit no matter what, as we run into locking issues otherwise.
+        self.index.commit()
     
     def delete_index(self):
         # Per the Whoosh mailing list, if wiping out everything from the index,
@@ -326,42 +335,13 @@ class SearchBackend(BaseSearchBackend):
                     'hits': 0,
                 }
             
-            raw_results = searcher.search(parsed_query, limit=end_offset, sortedby=sort_by, reverse=reverse)
+            raw_results = searcher.search(parsed_query, sortedby=sort_by, reverse=reverse)
             
             # Handle the case where the results have been narrowed.
             if narrowed_results:
                 raw_results.filter(narrowed_results)
             
-            # Make sure we don't process bits we already have.
-            # import pdb; pdb.set_trace()
-            
-            # Determine the page.
-            page_num = 0
-            
-            if end_offset is None:
-                end_offset = 1000000
-            
-            if start_offset is None:
-                start_offset = 0
-            
-            page_length = end_offset - start_offset
-            
-            if page_length and page_length > 0:
-                page_num = start_offset / page_length
-            
-            # Increment because Whoosh uses 1-based page numbers.
-            page_num += 1
-            
-            try:
-                raw_page = ResultsPage(raw_results, page_num, page_length)
-            except ValueError:
-                return {
-                    'results': [],
-                    'hits': 0,
-                    'spelling_suggestion': spelling_suggestion,
-                }
-            
-            return self._process_results(raw_page, highlight=highlight, query_string=query_string, spelling_query=spelling_query)
+            return self._process_results(raw_results, start_offset, end_offset, highlight=highlight, query_string=query_string, spelling_query=spelling_query)
         else:
             if getattr(settings, 'HAYSTACK_INCLUDE_SPELLING', False):
                 if spelling_query:
@@ -386,20 +366,22 @@ class SearchBackend(BaseSearchBackend):
             'hits': 0,
         }
     
-    def _process_results(self, raw_page, highlight=False, query_string='', spelling_query=None):
+    def _process_results(self, raw_results, start_offset, end_offset, highlight=False, query_string='', spelling_query=None):
         from haystack import site
         results = []
         
         # It's important to grab the hits first before slicing. Otherwise, this
         # can cause pagination failures.
-        hits = len(raw_page)
+        hits = len(raw_results)
+        sliced_results = raw_results[start_offset:end_offset]
         
         facets = {}
         spelling_suggestion = None
         indexed_models = site.get_indexed_models()
         
-        for doc_offset, raw_result in enumerate(raw_page):
-            score = raw_page.score(doc_offset) or 0
+        for doc_offset, raw_result in enumerate(sliced_results):
+            score = raw_results.score(doc_offset + start_offset) or 0
+            raw_result = dict(raw_result)
             app_label, model_name = raw_result['django_ct'].split('.')
             additional_fields = {}
             model = get_model(app_label, model_name)
@@ -412,7 +394,7 @@ class SearchBackend(BaseSearchBackend):
                     if string_key in index.fields and hasattr(index.fields[string_key], 'convert'):
                         # Special-cased due to the nature of KEYWORD fields.
                         if isinstance(index.fields[string_key], MultiValueField):
-                            if value is None or len(value) is 0:
+                            if value is None:
                                 additional_fields[string_key] = []
                             else:
                                 additional_fields[string_key] = value.split(',')
@@ -487,13 +469,17 @@ class SearchBackend(BaseSearchBackend):
         Code courtesy of pysolr.
         """
         if hasattr(value, 'strftime'):
-            if not hasattr(value, 'hour'):
-                value = datetime(value.year, value.month, value.day, 0, 0, 0)
+            if hasattr(value, 'hour'):
+                value = force_unicode(value.strftime('%Y-%m-%dT%H:%M:%S'))
+            else:
+                value = force_unicode(value.strftime('%Y-%m-%dT00:00:00'))
         elif isinstance(value, bool):
             if value:
-                value = True
+                # value = True
+                value = u'true'
             else:
-                value = False
+                # value = False
+                value = u'false'
         elif isinstance(value, (list, tuple)):
             value = u','.join([force_unicode(v) for v in value])
         elif isinstance(value, (int, long, float)):
@@ -550,43 +536,9 @@ class SearchQuery(BaseSearchQuery):
         else:
             self.backend = SearchBackend(site=site)
     
-    def _convert_datetime(self, date):
-        if hasattr(date, 'hour'):
-            return force_unicode(date.strftime('%Y%m%dT%H%M%S'))
-        else:
-            return force_unicode(date.strftime('%Y%m%dT000000'))
-    
-    def clean(self, query_fragment):
-        """
-        Provides a mechanism for sanitizing user input before presenting the
-        value to the backend.
-        
-        Whoosh 1.X differs here in that you can no longer use a backslash
-        to escape reserved characters. Instead, the whole word should be
-        quoted.
-        """
-        words = query_fragment.split()
-        cleaned_words = []
-        
-        for word in words:
-            if word in self.backend.RESERVED_WORDS:
-                word = word.replace(word, word.lower())
-            
-            for char in self.backend.RESERVED_CHARACTERS:
-                if char in word:
-                    word = "'%s'" % word
-                    break
-            
-            cleaned_words.append(word)
-        
-        return ' '.join(cleaned_words)
     
     def build_query_fragment(self, field, filter_type, value):
         result = ''
-        is_datetime = False
-        
-        if hasattr(value, 'strftime'):
-            is_datetime = True
         
         if filter_type != 'in':
             # 'in' is a bit of a special case, as we don't want to
@@ -615,23 +567,24 @@ class SearchQuery(BaseSearchQuery):
             }
             
             if filter_type != 'in':
-                if is_datetime is True:
-                    value = self._convert_datetime(value)
+                if isinstance(value, basestring):
+                    possible_datetime = DATETIME_REGEX.search(value)
+                    
+                    if possible_datetime:
+                        value = self.clean(value)
                 
                 result = filter_types[filter_type] % (index_fieldname, value)
             else:
                 in_options = []
                 
                 for possible_value in value:
-                    is_datetime = False
-                    
-                    if hasattr(possible_value, 'strftime'):
-                        is_datetime = True
-                    
                     pv = self.backend._from_python(possible_value)
                     
-                    if is_datetime is True:
-                        pv = self._convert_datetime(pv)
+                    if isinstance(pv, basestring):
+                        possible_datetime = DATETIME_REGEX.search(pv)
+                        
+                        if possible_datetime:
+                            pv = self.clean(pv)
                     
                     in_options.append('%s:"%s"' % (index_fieldname, pv))
                 
