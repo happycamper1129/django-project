@@ -1,4 +1,3 @@
-import warnings
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase
 import haystack
@@ -6,22 +5,10 @@ import haystack
 
 class LoadBackendTestCase(TestCase):
     def test_load_solr(self):
-        try:
-            import pysolr
-        except ImportError:
-            warnings.warn("Pysolr doesn't appear to be installed. Unable to test loading the Solr backend.")
-            return
-        
         backend = haystack.load_backend('solr')
         self.assertEqual(backend.BACKEND_NAME, 'solr')
     
     def test_load_whoosh(self):
-        try:
-            import whoosh
-        except ImportError:
-            warnings.warn("Whoosh doesn't appear to be installed. Unable to test loading the Whoosh backend.")
-            return
-        
         backend = haystack.load_backend('whoosh')
         self.assertEqual(backend.BACKEND_NAME, 'whoosh')
     

@@ -23,13 +23,13 @@ def clear_solr_index():
     raw_solr.delete(q='*:*')
 
 
-class SolrMockSearchIndex(SearchIndex):
+class SolrMockSearchIndex(RealTimeSearchIndex):
     text = CharField(document=True, use_template=True)
     name = CharField(model_attr='author', faceted=True)
     pub_date = DateField(model_attr='pub_date')
 
 
-class SolrMaintainTypeMockSearchIndex(SearchIndex):
+class SolrMaintainTypeMockSearchIndex(RealTimeSearchIndex):
     text = CharField(document=True, use_template=True)
     month = CharField(indexed=False)
     pub_date = DateField(model_attr='pub_date')
@@ -38,13 +38,13 @@ class SolrMaintainTypeMockSearchIndex(SearchIndex):
         return "%02d" % obj.pub_date.month
 
 
-class SolrMockModelSearchIndex(SearchIndex):
+class SolrMockModelSearchIndex(RealTimeSearchIndex):
     text = CharField(model_attr='foo', document=True)
     name = CharField(model_attr='author')
     pub_date = DateField(model_attr='pub_date')
 
 
-class SolrAnotherMockModelSearchIndex(SearchIndex):
+class SolrAnotherMockModelSearchIndex(RealTimeSearchIndex):
     text = CharField(document=True)
     name = CharField(model_attr='author')
     pub_date = DateField(model_attr='pub_date')
@@ -53,7 +53,7 @@ class SolrAnotherMockModelSearchIndex(SearchIndex):
         return u"You might be searching for the user %s" % obj.author
 
 
-class SolrRoundTripSearchIndex(SearchIndex):
+class SolrRoundTripSearchIndex(RealTimeSearchIndex):
     text = CharField(document=True, default='')
     name = CharField()
     is_active = BooleanField()
@@ -696,10 +696,14 @@ class LiveSolrMoreLikeThisTestCase(TestCase):
         haystack.site = test_site
         
         self.sqs = SearchQuerySet()
-
-        test_site.get_index(MockModel).update()
-        test_site.get_index(AnotherMockModel).update()
-
+        
+        # Force indexing of the content.
+        for mock in MockModel.objects.all():
+            mock.save()
+        
+        # Force indexing of the content.
+        for mock in AnotherMockModel.objects.all():
+            mock.save()
     
     def tearDown(self):
         # Restore.
