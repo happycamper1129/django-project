@@ -1,5 +1,6 @@
 # "Hey, Django! Look at me, I'm an app! For Serious!"
 import logging
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.utils.encoding import force_unicode
@@ -65,18 +66,18 @@ class SearchResult(object):
     def _get_object(self):
         if self._object is None:
             if self.model is None:
-                self.log.error("Model could not be found for SearchResult '%s'." % self)
+                self.log.error("Model could not be found for SearchResult '%s'.", self)
                 return None
 
             try:
                 try:
                     self._object = self.searchindex.read_queryset().get(pk=self.pk)
                 except NotHandled:
-                    self.log.warning("Model '%s.%s' not handled by the routers." % (self.app_label, self.model_name))
+                    self.log.warning("Model '%s.%s' not handled by the routers.", self.app_label, self.model_name)
                     # Revert to old behaviour
                     self._object = self.model._default_manager.get(pk=self.pk)
             except ObjectDoesNotExist:
-                self.log.error("Object could not be found in database for SearchResult '%s'." % self)
+                self.log.error("Object could not be found in database for SearchResult '%s'.", self)
                 self._object = None
 
         return self._object
@@ -134,7 +135,7 @@ class SearchResult(object):
 
     def _get_verbose_name(self):
         if self.model is None:
-            self.log.error("Model could not be found for SearchResult '%s'." % self)
+            self.log.error("Model could not be found for SearchResult '%s'.", self)
             return u''
 
         return force_unicode(capfirst(self.model._meta.verbose_name))
@@ -143,7 +144,7 @@ class SearchResult(object):
 
     def _get_verbose_name_plural(self):
         if self.model is None:
-            self.log.error("Model could not be found for SearchResult '%s'." % self)
+            self.log.error("Model could not be found for SearchResult '%s'.", self)
             return u''
 
         return force_unicode(capfirst(self.model._meta.verbose_name_plural))
@@ -153,7 +154,7 @@ class SearchResult(object):
     def content_type(self):
         """Returns the content type for the result's model instance."""
         if self.model is None:
-            self.log.error("Model could not be found for SearchResult '%s'." % self)
+            self.log.error("Model could not be found for SearchResult '%s'.", self)
             return u''
 
         return unicode(self.model._meta)
@@ -221,11 +222,46 @@ class SearchResult(object):
 
 # Setup pre_save/pre_delete signals to make sure things like the signals in
 # ``RealTimeSearchIndex`` are setup in time to handle data changes.
-def load_indexes(sender, instance, *args, **kwargs):
+def load_indexes(sender, *args, **kwargs):
     from haystack import connections
 
     for conn in connections.all():
-        conn.get_unified_index().setup_indexes()
+        ui = conn.get_unified_index()
+        ui.setup_indexes()
+
+
+def reload_indexes(sender, *args, **kwargs):
+    from haystack import connections
+
+    for conn in connections.all():
+        ui = conn.get_unified_index()
+        # Note: Unlike above, we're resetting the ``UnifiedIndex`` here.
+        # Thi gives us a clean slate.
+        ui.reset()
+        ui.setup_indexes()
+
 
 models.signals.pre_save.connect(load_indexes, dispatch_uid='setup_index_signals')
 models.signals.pre_delete.connect(load_indexes, dispatch_uid='setup_index_signals')
+
+
+if 'south' in settings.INSTALLED_APPS:
+    # South causes a little mayhem, as when you run a ``syncdb``, it'll setup
+    # the apps *without* migrations using Django's built-in ``syncdb``. When
+    # this happens, ``INSTALLED_APPS`` consists of only those apps, NOT all
+    # apps.At the end of that sync, Django runs ``create_permissions``, which
+    # of course uses the ORM, causing the ``pre_save`` above to fire.
+
+    # The effect is that Haystack runs its setup against the then-subset of
+    # ``INSTALLED_APPS``. Once that's done, it won't re-setup the
+    # ``UnifiedIndex`` again, since the signal has a ``dispatch_uid``.
+
+    # This bug gets exposed only either when people run tests that *use*
+    # the South migrations OR when they have a data migration & the changed
+    # data isn't picked up by ``RealTimeSearchIndex`` (or similar).
+
+    # In the event of this, the only safe route is to listen for
+    # ``south.signals.post_migrate``, then re-run setup. This will
+    # unfortunately happen per-app, but should be quick & reliable.
+    from south.signals import post_migrate
+    post_migrate.connect(reload_indexes)
