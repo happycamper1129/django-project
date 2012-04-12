@@ -2,7 +2,6 @@ import datetime
 import os
 import warnings
 from optparse import make_option
-from django import db
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import LabelCommand
@@ -29,7 +28,7 @@ def worker(bits):
         # out connections (via ``... = {}``) destroys in-memory DBs.
         if not 'sqlite3' in info['ENGINE']:
             try:
-                db.close_connection()
+                connections._connections[alias].close()
                 del(connections._connections[alias])
             except KeyError:
                 pass
@@ -206,10 +205,6 @@ class Command(LabelCommand):
                     print "Skipping '%s' - no index." % model
                 continue
 
-            if self.workers > 0:
-                # workers resetting connections leads to references to models / connections getting stale and having their connection disconnected from under them. Resetting before the loop continues and it accesses the ORM makes it better.
-                db.close_connection()
-
             qs = index.build_queryset(start_date=self.start_date, end_date=self.end_date)
             total = qs.count()
 
@@ -233,6 +228,7 @@ class Command(LabelCommand):
             if self.workers > 0:
                 pool = multiprocessing.Pool(self.workers)
                 pool.map(worker, ghetto_queue)
+                pool.terminate()
 
             if self.remove:
                 if self.start_date or self.end_date or total <= 0:
@@ -256,3 +252,4 @@ class Command(LabelCommand):
                 if self.workers > 0:
                     pool = multiprocessing.Pool(self.workers)
                     pool.map(worker, ghetto_queue)
+                    pool.terminate()
