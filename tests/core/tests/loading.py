@@ -4,18 +4,7 @@ from haystack.exceptions import SearchFieldError, NotHandled
 from haystack import indexes
 from haystack.utils import loading
 from core.models import MockModel, AnotherMockModel
-
 import unittest
-
-if not hasattr(unittest, "skipIf"):
-    # We're dealing with Python < 2.7 and we need unittest2, which might be available from Django:
-    try:
-        from django.utils import unittest
-    except ImportError:
-        try:
-            import unittest2 as unittest
-        except ImportError:
-            raise RuntimeError("Tests require unittest2. If you use Django 1.2, install unittest2")
 
 try:
     import pysolr
