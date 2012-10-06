@@ -74,7 +74,7 @@ Something like the following is suggested::
         suggestions = indexes.FacetCharField()
 
         def prepare(self, obj):
-            prepared_data = super(MySearchIndex, self).prepare(obj)
+            prepared_data = super(NoteIndex, self).prepare(obj)
             prepared_data['suggestions'] = prepared_data['text']
             return prepared_data
 
@@ -153,10 +153,10 @@ locally. Modifications should be done in a YAML file, the stock one being
       data: /usr/local/var/data
 
 You'll also need an Elasticsearch binding: pyelasticsearch_ (**NOT**
-``pyes``). Place ``pyelasticsearch.py`` somewhere on your ``PYTHONPATH``
+``pyes``). Place ``pyelasticsearch`` somewhere on your ``PYTHONPATH``
 (usually ``python setup.py install`` or ``pip install pyelasticsearch``).
 
-.. _pyelasticsearch: http://pypi.python.org/pypi/pyelasticsearch/0.1
+.. _pyelasticsearch: http://pypi.python.org/pypi/pyelasticsearch/
 
 .. note::
 
