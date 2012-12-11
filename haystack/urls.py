@@ -1,7 +1,4 @@
-try:
-    from django.conf.urls import *
-except ImportError:
-    from django.conf.urls.defaults import *
+from django.conf.urls.defaults import *
 from haystack.views import SearchView
 
 
