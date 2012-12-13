@@ -1,4 +1,3 @@
-import os
 import shutil
 from django.conf import settings
 from django.test import TestCase
@@ -8,15 +7,6 @@ from haystack.query import SearchQuerySet
 from haystack.utils.loading import UnifiedIndex
 from multipleindex.search_indexes import FooIndex
 from multipleindex.models import Foo, Bar
-
-def tearDownModule():
-    # Because Whoosh doesn't clean up its mess.
-    for name, opts in settings.HAYSTACK_CONNECTIONS.items():
-        if "WhooshEngine" not in opts['ENGINE']:
-            continue
-        p = opts['PATH']
-        if os.path.exists(p):
-            shutil.rmtree(p)
 
 
 class MultipleIndexTestCase(TestCase):
@@ -56,7 +46,8 @@ class MultipleIndexTestCase(TestCase):
     def tearDown(self):
         self.fi.clear()
         self.bi.clear()
-
+        # Because Whoosh doesn't clean up its mess.
+        shutil.rmtree(settings.HAYSTACK_CONNECTIONS['whoosh']['PATH'])
         super(MultipleIndexTestCase, self).setUp()
 
     def test_index_update_object_using(self):

@@ -1,4 +1,4 @@
-from tempfile import mkdtemp
+import os
 from settings import *
 
 INSTALLED_APPS += [
@@ -12,7 +12,7 @@ HAYSTACK_CONNECTIONS = {
     },
     'whoosh': {
         'ENGINE': 'haystack.backends.whoosh_backend.WhooshEngine',
-        'PATH': mkdtemp(prefix='haystack-multipleindex-whoosh-tests-'),
+        'PATH': os.path.join('tmp', 'test_whoosh_query'),
         'EXCLUDED_INDEXES': ['multipleindex.search_indexes.BarIndex'],
     },
 }

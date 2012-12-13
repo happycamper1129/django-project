@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 if [ "$1" == "--help" ]; then
     echo "Runs the test suite for all backends"
     echo
@@ -17,42 +15,38 @@ else
     TEST_RUNNER=django-admin.py
 fi
 
-export FAIL=0
-
 echo "** CORE **"
-$TEST_RUNNER test core --settings=settings $TEST_RUNNER_ARGS || FAIL=1
+$TEST_RUNNER test core --settings=settings
 echo ""
 
 echo "** DISCOVERY **"
-$TEST_RUNNER test discovery --settings=discovery_settings $TEST_RUNNER_ARGS || FAIL=1
+$TEST_RUNNER test discovery --settings=discovery_settings
 echo ""
 
 echo "** OVERRIDES **"
-$TEST_RUNNER test overrides --settings=overrides_settings $TEST_RUNNER_ARGS || FAIL=1
+$TEST_RUNNER test overrides --settings=overrides_settings
 echo ""
 
 echo "** SIMPLE **"
-$TEST_RUNNER test simple_tests --settings=simple_settings $TEST_RUNNER_ARGS || FAIL=1
+$TEST_RUNNER test simple_tests --settings=simple_settings
 echo ""
 
 echo "** SOLR **"
-$TEST_RUNNER test solr_tests --settings=solr_settings $TEST_RUNNER_ARGS || FAIL=1
+$TEST_RUNNER test solr_tests --settings=solr_settings
 echo ""
 
 echo "** Elasticsearch **"
-$TEST_RUNNER test elasticsearch_tests --settings=elasticsearch_settings $TEST_RUNNER_ARGS || FAIL=1
+$TEST_RUNNER test elasticsearch_tests --settings=elasticsearch_settings
 echo ""
 
 echo "** WHOOSH **"
-$TEST_RUNNER test whoosh_tests --settings=whoosh_settings $TEST_RUNNER_ARGS || FAIL=1
+$TEST_RUNNER test whoosh_tests --settings=whoosh_settings
 echo ""
 
 echo "** MULTIPLE INDEX **"
-$TEST_RUNNER test multipleindex --settings=multipleindex_settings $TEST_RUNNER_ARGS || FAIL=1
+$TEST_RUNNER test multipleindex --settings=multipleindex_settings
 echo ""
 
 echo "** SPATIAL **"
-$TEST_RUNNER test spatial --settings=spatial_settings $TEST_RUNNER_ARGS || FAIL=1
+$TEST_RUNNER test spatial --settings=spatial_settings
 echo ""
-
-exit $FAIL
