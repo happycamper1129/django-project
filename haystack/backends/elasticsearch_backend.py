@@ -115,11 +115,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
         self.content_field_name, field_mapping = self.build_schema(unified_index.all_searchfields())
         current_mapping = {
             'modelresult': {
-                'properties': field_mapping,
-                '_boost': {
-                    'name': 'boost',
-                    'null_value': 1.0
-                }
+                'properties': field_mapping
             }
         }
 
