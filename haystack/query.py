@@ -33,15 +33,11 @@ class SearchQuerySet(object):
         self._ignored_result_count = 0
         self.log = logging.getLogger('haystack')
 
-    def _determine_backend(self):        
-        from haystack import connections
+    def _determine_backend(self):
         # A backend has been manually selected. Use it instead.
         if self._using is not None:
-            if self.query:
-                self.query = self.query.using(self._using)
-            else:
-                self.query = connections[self._using].get_query()            
-            return self._using
+            self.query = connections[self._using].get_query()
+            return
 
         # No backend, so rely on the routers to figure out what's right.
         hints = {}
