@@ -46,8 +46,7 @@ class MockSearchBackend(BaseSearchBackend):
 
     def remove(self, obj, commit=True):
         global MOCK_INDEX_DATA
-        if commit == True:
-            del(MOCK_INDEX_DATA[get_identifier(obj)])
+        del(MOCK_INDEX_DATA[get_identifier(obj)])
 
     def clear(self, models=[], commit=True):
         global MOCK_INDEX_DATA
