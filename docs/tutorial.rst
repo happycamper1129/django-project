@@ -63,6 +63,16 @@ backend to get started. There is a quick-start guide to
 official instructions.
 
 
+Installation
+=============
+
+Use your favorite Python package manager to install the app from PyPI, e.g.
+
+Example::
+
+    pip install django-haystack
+
+
 Configuration
 =============
 
@@ -162,7 +172,7 @@ Example::
     import os
     HAYSTACK_CONNECTIONS = {
         'default': {
-            'ENGINE': 'haystack.backends.xapian_backend.XapianEngine',
+            'ENGINE': 'xapian_backend.XapianEngine',
             'PATH': os.path.join(os.path.dirname(__file__), 'xapian_index'),
         },
     }
