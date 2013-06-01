@@ -1,4 +1,3 @@
-from __future__ import unicode_literals
 from django.contrib.admin.options import ModelAdmin
 from django.contrib.admin.views.main import ChangeList, SEARCH_VAR
 from django.core.exceptions import PermissionDenied

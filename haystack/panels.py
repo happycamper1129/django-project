@@ -1,4 +1,3 @@
-from __future__ import unicode_literals
 import datetime
 from django.template.loader import render_to_string
 from django.utils.translation import ugettext_lazy as _
