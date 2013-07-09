@@ -1,4 +1,3 @@
-from __future__ import unicode_literals
 import os
 import re
 import shutil
@@ -8,7 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models.loading import get_model
 from django.utils.datetime_safe import datetime
-from django.utils import six
+from django.utils.encoding import force_unicode
 from haystack.backends import BaseEngine, BaseSearchBackend, BaseSearchQuery, log_query, EmptyResults
 from haystack.constants import ID, DJANGO_CT, DJANGO_ID
 from haystack.exceptions import MissingDependency, SearchBackendError
@@ -24,11 +23,6 @@ except ImportError:
         import simplejson as json
     except ImportError:
         from django.utils import simplejson as json
-
-try:
-    from django.utils.encoding import force_text
-except ImportError:
-    from django.utils.encoding import force_unicode as force_text
 
 try:
     import whoosh
@@ -185,7 +179,7 @@ class WhooshSearchBackend(BaseSearchBackend):
 
             try:
                 writer.update_document(**doc)
-            except Exception as e:
+            except Exception, e:
                 if not self.silently_fail:
                     raise
 
@@ -217,7 +211,7 @@ class WhooshSearchBackend(BaseSearchBackend):
 
         try:
             self.index.delete_by_query(q=self.parser.parse(u'%s:"%s"' % (ID, whoosh_id)))
-        except Exception as e:
+        except Exception, e:
             if not self.silently_fail:
                 raise
 
@@ -239,7 +233,7 @@ class WhooshSearchBackend(BaseSearchBackend):
                     models_to_delete.append(u"%s:%s.%s" % (DJANGO_CT, model._meta.app_label, model._meta.module_name))
 
                 self.index.delete_by_query(q=self.parser.parse(u" OR ".join(models_to_delete)))
-        except Exception as e:
+        except Exception, e:
             if not self.silently_fail:
                 raise
 
@@ -279,7 +273,7 @@ class WhooshSearchBackend(BaseSearchBackend):
                 'hits': 0,
             }
 
-        query_string = force_text(query_string)
+        query_string = force_unicode(query_string)
 
         # A one-character query (non-wildcard) gets nabbed by a stopwords
         # filter and should yield zero results.
@@ -356,7 +350,7 @@ class WhooshSearchBackend(BaseSearchBackend):
             narrow_searcher = self.index.searcher()
 
             for nq in narrow_queries:
-                recent_narrowed_results = narrow_searcher.search(self.parser.parse(force_text(nq)))
+                recent_narrowed_results = narrow_searcher.search(self.parser.parse(force_unicode(nq)))
 
                 if len(recent_narrowed_results) <= 0:
                     return {
@@ -405,7 +399,7 @@ class WhooshSearchBackend(BaseSearchBackend):
             page_length = end_offset - start_offset
 
             if page_length and page_length > 0:
-                page_num = int(start_offset / page_length)
+                page_num = start_offset / page_length
 
             # Increment because Whoosh uses 1-based page numbers.
             page_num += 1
@@ -487,7 +481,7 @@ class WhooshSearchBackend(BaseSearchBackend):
             narrow_searcher = self.index.searcher()
 
             for nq in narrow_queries:
-                recent_narrowed_results = narrow_searcher.search(self.parser.parse(force_text(nq)))
+                recent_narrowed_results = narrow_searcher.search(self.parser.parse(force_unicode(nq)))
 
                 if len(recent_narrowed_results) <= 0:
                     return {
@@ -517,7 +511,7 @@ class WhooshSearchBackend(BaseSearchBackend):
         page_length = end_offset - start_offset
 
         if page_length and page_length > 0:
-            page_num = int(start_offset / page_length)
+            page_num = start_offset / page_length
 
         # Increment because Whoosh uses 1-based page numbers.
         page_num += 1
@@ -631,7 +625,7 @@ class WhooshSearchBackend(BaseSearchBackend):
     def create_spelling_suggestion(self, query_string):
         spelling_suggestion = None
         sp = SpellChecker(self.storage)
-        cleaned_query = force_text(query_string)
+        cleaned_query = force_unicode(query_string)
 
         if not query_string:
             return spelling_suggestion
@@ -671,12 +665,12 @@ class WhooshSearchBackend(BaseSearchBackend):
             else:
                 value = 'false'
         elif isinstance(value, (list, tuple)):
-            value = u','.join([force_text(v) for v in value])
-        elif isinstance(value, (six.integer_types, float)):
+            value = u','.join([force_unicode(v) for v in value])
+        elif isinstance(value, (int, long, float)):
             # Leave it alone.
             pass
         else:
-            value = force_text(value)
+            value = force_unicode(value)
         return value
 
     def _to_python(self, value):
@@ -690,7 +684,7 @@ class WhooshSearchBackend(BaseSearchBackend):
         elif value == 'false':
             return False
 
-        if value and isinstance(value, six.string_types):
+        if value and isinstance(value, basestring):
             possible_datetime = DATETIME_REGEX.search(value)
 
             if possible_datetime:
@@ -706,7 +700,7 @@ class WhooshSearchBackend(BaseSearchBackend):
             converted_value = json.loads(value)
 
             # Try to handle most built-in types.
-            if isinstance(converted_value, (list, tuple, set, dict, six.integer_types, float, complex)):
+            if isinstance(converted_value, (list, tuple, set, dict, int, float, long, complex)):
                 return converted_value
         except:
             # If it fails (SyntaxError or its ilk) or we don't trust it,
@@ -719,9 +713,9 @@ class WhooshSearchBackend(BaseSearchBackend):
 class WhooshSearchQuery(BaseSearchQuery):
     def _convert_datetime(self, date):
         if hasattr(date, 'hour'):
-            return force_text(date.strftime('%Y%m%d%H%M%S'))
+            return force_unicode(date.strftime('%Y%m%d%H%M%S'))
         else:
-            return force_text(date.strftime('%Y%m%d000000'))
+            return force_unicode(date.strftime('%Y%m%d000000'))
 
     def clean(self, query_fragment):
         """
@@ -761,7 +755,7 @@ class WhooshSearchQuery(BaseSearchQuery):
             if hasattr(value, 'strftime'):
                 is_datetime = True
 
-            if isinstance(value, six.string_types) and value != ' ':
+            if isinstance(value, basestring) and value != ' ':
                 # It's not an ``InputType``. Assume ``Clean``.
                 value = Clean(value)
             else:
@@ -801,7 +795,7 @@ class WhooshSearchQuery(BaseSearchQuery):
                     # Iterate over terms & incorportate the converted form of each into the query.
                     terms = []
 
-                    if isinstance(prepared_value, six.string_types):
+                    if isinstance(prepared_value, basestring):
                         possible_values = prepared_value.split(' ')
                     else:
                         if is_datetime is True:
@@ -830,7 +824,7 @@ class WhooshSearchQuery(BaseSearchQuery):
                     if is_datetime is True:
                         pv = self._convert_datetime(pv)
 
-                    if isinstance(pv, six.string_types) and not is_datetime:
+                    if isinstance(pv, basestring) and not is_datetime:
                         in_options.append('"%s"' % pv)
                     else:
                         in_options.append('%s' % pv)

@@ -93,9 +93,7 @@ class ElasticsearchSearchQueryTestCase(TestCase):
     def test_build_query_in_with_set(self):
         self.sq.add_filter(SQ(content='why'))
         self.sq.add_filter(SQ(title__in=set(["A Famous Paper", "An Infamous Article"])))
-        self.assertTrue('((why) AND title:(' in self.sq.build_query())
-        self.assertTrue('"A Famous Paper"' in self.sq.build_query())
-        self.assertTrue('"An Infamous Article"' in self.sq.build_query())
+        self.assertEqual(self.sq.build_query(), u'((why) AND title:("A Famous Paper" OR "An Infamous Article"))')
 
     def test_build_query_wildcard_filter_types(self):
         self.sq.add_filter(SQ(content='why'))

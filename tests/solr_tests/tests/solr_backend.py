@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
-from __future__ import unicode_literals
 import datetime
 from decimal import Decimal
 import os
@@ -35,7 +33,7 @@ except ImportError:
 
 def clear_solr_index():
     # Wipe it clean.
-    print('Clearing out Solr...')
+    print 'Clearing out Solr...'
     raw_solr = pysolr.Solr(settings.HAYSTACK_CONNECTIONS['default']['URL'])
     raw_solr.delete(q='*:*')
 
@@ -194,7 +192,7 @@ class SolrSearchBackendTestCase(TestCase):
 
         self.sample_objs = []
 
-        for i in range(1, 4):
+        for i in xrange(1, 4):
             mock = MockModel()
             mock.id = i
             mock.author = 'daniel%s' % i
@@ -612,7 +610,7 @@ class FailedSolrSearchBackendTestCase(TestCase):
     def test_all_cases(self, mock_send_request, mock_log):
         self.sample_objs = []
 
-        for i in range(1, 4):
+        for i in xrange(1, 4):
             mock = MockModel()
             mock.id = i
             mock.author = 'daniel%s' % i
@@ -735,7 +733,7 @@ class LiveSolrSearchQuerySetTestCase(TestCase):
         global lssqstc_all_loaded
 
         if lssqstc_all_loaded is None:
-            print('Reloading data...')
+            print 'Reloading data...'
             lssqstc_all_loaded = True
 
             # Wipe it clean.
@@ -1271,7 +1269,7 @@ class SolrBoostBackendTestCase(TestCase):
 
         self.sample_objs = []
 
-        for i in range(1, 5):
+        for i in xrange(1, 5):
             mock = AFourthMockModel()
             mock.id = i
 

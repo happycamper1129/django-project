@@ -1,13 +1,15 @@
-from __future__ import unicode_literals
 import copy
 import inspect
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.datastructures import SortedDict
-from django.utils import importlib
 from django.utils.module_loading import module_has_submodule
 from haystack.constants import Indexable, DEFAULT_ALIAS
 from haystack.exceptions import NotHandled, SearchFieldError
+try:
+    from django.utils import importlib
+except ImportError:
+    from haystack.utils import importlib
 
 
 def import_class(path):
@@ -265,7 +267,7 @@ class UnifiedIndex(object):
         if not self._built:
             self.build()
 
-        return list(self.indexes.keys())
+        return self.indexes.keys()
 
     def get_index_fieldname(self, field):
         if not self._built:

@@ -1,12 +1,10 @@
-from __future__ import print_function
-from __future__ import unicode_literals
 from threading import Thread
+import Queue
 from django.core.urlresolvers import reverse
 from django.conf import settings
 from django import forms
 from django.http import HttpRequest, QueryDict
 from django.test import TestCase
-from django.utils.six.moves import queue
 from haystack import connections, connection_router
 from haystack.forms import model_choices, SearchForm, ModelSearchForm, FacetedSearchForm
 from haystack import indexes
@@ -92,37 +90,37 @@ class SearchViewTestCase(TestCase):
     def test_thread_safety(self):
         exceptions = []
 
-        def threaded_view(resp_queue, view, request):
+        def threaded_view(queue, view, request):
             import time; time.sleep(2)
             try:
                 inst = view(request)
-                resp_queue.put(request.GET['name'])
-            except Exception as e:
+                queue.put(request.GET['name'])
+            except Exception, e:
                 exceptions.append(e)
                 raise
 
         class ThreadedSearchView(SearchView):
             def __call__(self, request):
-                print("Name: %s" % request.GET['name'])
+                print "Name: %s" % request.GET['name']
                 return super(ThreadedSearchView, self).__call__(request)
 
         view = search_view_factory(view_class=ThreadedSearchView)
-        resp_queue = queue.Queue()
+        queue = Queue.Queue()
         request_1 = HttpRequest()
         request_1.GET = {'name': 'foo'}
         request_2 = HttpRequest()
         request_2.GET = {'name': 'bar'}
 
-        th1 = Thread(target=threaded_view, args=(resp_queue, view, request_1))
-        th2 = Thread(target=threaded_view, args=(resp_queue, view, request_2))
+        th1 = Thread(target=threaded_view, args=(queue, view, request_1))
+        th2 = Thread(target=threaded_view, args=(queue, view, request_2))
 
         th1.start()
         th2.start()
         th1.join()
         th2.join()
 
-        foo = resp_queue.get()
-        bar = resp_queue.get()
+        foo = queue.get()
+        bar = queue.get()
         self.assertNotEqual(foo, bar)
 
     def test_spelling(self):

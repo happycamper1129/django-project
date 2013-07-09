@@ -1,17 +1,11 @@
 # "Hey, Django! Look at me, I'm an app! For Serious!"
-from __future__ import unicode_literals
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
-from django.utils import six
+from django.utils.encoding import force_unicode
 from django.utils.text import capfirst
 from haystack.exceptions import NotHandled, SpatialError
 from haystack.utils import log as logging
-
-try:
-    from django.utils.encoding import force_text
-except ImportError:
-    from django.utils.encoding import force_unicode as force_text
 
 try:
     from geopy import distance as geopy_distance
@@ -55,7 +49,7 @@ class SearchResult(object):
         return "<SearchResult: %s.%s (pk=%r)>" % (self.app_label, self.model_name, self.pk)
 
     def __unicode__(self):
-        return force_text(self.__repr__())
+        return force_unicode(self.__repr__())
 
     def __getattr__(self, attr):
         if attr == '__getnewargs__':
@@ -144,7 +138,7 @@ class SearchResult(object):
             self.log.error("Model could not be found for SearchResult '%s'.", self)
             return u''
 
-        return force_text(capfirst(self.model._meta.verbose_name))
+        return force_unicode(capfirst(self.model._meta.verbose_name))
 
     verbose_name = property(_get_verbose_name)
 
@@ -153,7 +147,7 @@ class SearchResult(object):
             self.log.error("Model could not be found for SearchResult '%s'.", self)
             return u''
 
-        return force_text(capfirst(self.model._meta.verbose_name_plural))
+        return force_unicode(capfirst(self.model._meta.verbose_name_plural))
 
     verbose_name_plural = property(_get_verbose_name_plural)
 
@@ -163,7 +157,7 @@ class SearchResult(object):
             self.log.error("Model could not be found for SearchResult '%s'.", self)
             return u''
 
-        return six.text_type(self.model._meta)
+        return unicode(self.model._meta)
 
     def get_additional_fields(self):
         """
