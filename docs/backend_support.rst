@@ -59,11 +59,10 @@ Whoosh
 
 * Full SearchQuerySet support
 * Automatic query building
-* "More Like This" functionality
 * Term Boosting
 * Stored (non-indexed) fields
 * Highlighting
-* Requires: whoosh (2.0.0+)
+* Requires: whoosh (1.1.1+)
 
 Xapian
 ------
@@ -90,7 +89,7 @@ Backend Support Matrix
 +----------------+------------------------+---------------------+----------------+------------+----------+---------------+--------------+---------+
 | Elasticsearch  | Yes                    | Yes                 | Yes            | Yes        | Yes      | Yes           | Yes          | Yes     |
 +----------------+------------------------+---------------------+----------------+------------+----------+---------------+--------------+---------+
-| Whoosh         | Yes                    | Yes                 | Yes            | Yes        | No       | Yes           | Yes          | No      |
+| Whoosh         | Yes                    | Yes                 | No             | Yes        | No       | Yes           | Yes          | No      |
 +----------------+------------------------+---------------------+----------------+------------+----------+---------------+--------------+---------+
 | Xapian         | Yes                    | Yes                 | Yes            | Yes        | Yes      | Yes           | Yes (plugin) | No      |
 +----------------+------------------------+---------------------+----------------+------------+----------+---------------+--------------+---------+
