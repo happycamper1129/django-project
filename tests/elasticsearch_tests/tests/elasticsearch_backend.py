@@ -94,6 +94,14 @@ class ElasticsearchBoostMockSearchIndex(indexes.SearchIndex, indexes.Indexable):
     def get_model(self):
         return AFourthMockModel
 
+    def prepare(self, obj):
+        data = super(ElasticsearchBoostMockSearchIndex, self).prepare(obj)
+
+        if obj.pk == 4:
+            data['boost'] = 5.0
+
+        return data
+
 
 class ElasticsearchRoundTripSearchIndex(indexes.SearchIndex, indexes.Indexable):
     text = indexes.CharField(document=True, default='')
@@ -1178,8 +1186,19 @@ class ElasticsearchBoostBackendTestCase(TestCase):
         results = SearchQuerySet().filter(SQ(author='daniel') | SQ(editor='daniel'))
 
         self.assertEqual([result.id for result in results], [
+            'core.afourthmockmodel.4',
             'core.afourthmockmodel.3',
             'core.afourthmockmodel.1',
-            'core.afourthmockmodel.2',
-            'core.afourthmockmodel.4'
+            'core.afourthmockmodel.2'
         ])
+
+    def test__to_python(self):
+        self.assertEqual(self.sb._to_python('abc'), 'abc')
+        self.assertEqual(self.sb._to_python('1'), 1)
+        self.assertEqual(self.sb._to_python('2653'), 2653)
+        self.assertEqual(self.sb._to_python('25.5'), 25.5)
+        self.assertEqual(self.sb._to_python('[1, 2, 3]'), [1, 2, 3])
+        self.assertEqual(self.sb._to_python('{"a": 1, "b": 2, "c": 3}'), {'a': 1, 'c': 3, 'b': 2})
+        self.assertEqual(self.sb._to_python('2009-05-09T16:14:00'), datetime.datetime(2009, 5, 9, 16, 14))
+        self.assertEqual(self.sb._to_python('2009-05-09T00:00:00'), datetime.datetime(2009, 5, 9, 0, 0))
+        self.assertEqual(self.sb._to_python(None), None)
