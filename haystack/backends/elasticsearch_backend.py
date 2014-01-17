@@ -398,9 +398,6 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             model_choices = []
 
         if len(model_choices) > 0:
-            if narrow_queries is None:
-                narrow_queries = set()
-
             filters.append({"terms": {DJANGO_CT: model_choices}})
 
         for q in narrow_queries:
@@ -626,13 +623,6 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
 
             if field_class.document is True:
                 content_field_name = field_class.index_fieldname
-
-            # The docs claim nothing is needed for multivalue...
-            # if field_class.is_multivalued:
-            #     field_data['multi_valued'] = 'true'
-
-            if field_class.stored:
-                field_mapping['store'] = 'yes'
 
             # Do this last to override `text` fields.
             if field_mapping['type'] == 'string':
@@ -911,10 +901,6 @@ class ElasticsearchSearchQuery(BaseSearchQuery):
         """Builds and executes the query. Returns a list of search results."""
         final_query = self.build_query()
         search_kwargs = self.build_params(spelling_query, **kwargs)
-
-        if kwargs:
-            search_kwargs.update(kwargs)
-
         results = self.backend.search(final_query, **search_kwargs)
         self._results = results.get('results', [])
         self._hit_count = results.get('hits', 0)
