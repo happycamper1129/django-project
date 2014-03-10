@@ -13,14 +13,14 @@ improve the site better.
 To this end, Haystack tries to make integrating custom search as easy as
 possible while being flexible/powerful enough to handle more advanced use cases.
 
-Haystack is a reusable app (that is, it relies only on it's own code and focuses
+Haystack is a reusable app (that is, it relies only on its own code and focuses
 on providing just search) that plays nicely with both apps you control as well as
 third-party apps (such as ``django.contrib.*``) without having to modify the
 sources.
 
 Haystack also does pluggable backends (much like Django's database
 layer), so virtually all of the code you write ought to be portable between
-which ever search engine you choose.
+whichever search engine you choose.
 
 .. note::
 
