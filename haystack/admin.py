@@ -1,16 +1,14 @@
 from __future__ import unicode_literals
-
-from django import template
-from django.contrib.admin.options import csrf_protect_m, ModelAdmin
+from django.contrib.admin.options import ModelAdmin
+from django.contrib.admin.options import csrf_protect_m
 from django.contrib.admin.views.main import ChangeList, SEARCH_VAR
 from django.core.exceptions import PermissionDenied
-from django.core.paginator import InvalidPage, Paginator
+from django.core.paginator import Paginator, InvalidPage
 from django.shortcuts import render_to_response
+from django import template
 from django.utils.translation import ungettext
-
 from haystack import connections
 from haystack.query import SearchQuerySet
-from haystack.utils import get_model_ct_tuple
 
 try:
     from django.utils.encoding import force_text
@@ -149,9 +147,9 @@ class SearchModelAdmin(ModelAdmin):
         }
         context.update(extra_context or {})
         context_instance = template.RequestContext(request, current_app=self.admin_site.name)
-        app_name, model_name = get_model_ct_tuple(self.model)
         return render_to_response(self.change_list_template or [
-            'admin/%s/%s/change_list.html' % (app_name, model_name),
-            'admin/%s/change_list.html' % app_name,
+            'admin/%s/%s/change_list.html' % (self.model._meta.app_label, self.model._meta.object_name.lower()),
+            'admin/%s/change_list.html' % self.model._meta.app_label,
             'admin/change_list.html'
         ], context, context_instance=context_instance)
+

@@ -12,7 +12,6 @@ from haystack.constants import VALID_FILTERS, FILTER_SEPARATOR, DEFAULT_ALIAS
 from haystack.exceptions import MoreLikeThisError, FacetingError
 from haystack.models import SearchResult
 from haystack.utils.loading import UnifiedIndex
-from haystack.utils import get_model_ct
 
 try:
     from django.utils.encoding import force_text
@@ -193,7 +192,7 @@ class BaseSearchBackend(object):
         models = []
 
         for model in connections[self.connection_alias].get_unified_index().get_indexed_models():
-            models.append(get_model_ct(model))
+            models.append(u"%s.%s" % (model._meta.app_label, model._meta.module_name))
 
         return models
 
