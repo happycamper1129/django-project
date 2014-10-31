@@ -289,7 +289,7 @@ class UnifiedIndex(object):
             self.build()
 
         if model_klass not in self.indexes:
-            raise NotHandled('The model %s is not registered' % model_klass)
+            raise NotHandled('The model %s is not registered' % model_klass.__class__)
 
         return self.indexes[model_klass]
 
