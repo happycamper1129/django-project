@@ -1,15 +1,12 @@
-# encoding: utf-8
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
+from __future__ import unicode_literals
 from django.conf import settings
-from django.core.paginator import InvalidPage, Paginator
+from django.core.paginator import Paginator, InvalidPage
 from django.http import Http404
 from django.shortcuts import render_to_response
 from django.template import RequestContext
-
-from haystack.forms import FacetedSearchForm, ModelSearchForm
+from haystack.forms import ModelSearchForm, FacetedSearchForm
 from haystack.query import EmptySearchQuerySet
+
 
 RESULTS_PER_PAGE = getattr(settings, 'HAYSTACK_SEARCH_RESULTS_PER_PAGE', 20)
 

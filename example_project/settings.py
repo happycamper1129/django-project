@@ -1,9 +1,3 @@
-# encoding: utf-8
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-import os
-
 # All the normal settings apply. What's included here are the bits you'll have
 # to customize.
 
@@ -12,7 +6,7 @@ INSTALLED_APPS = INSTALLED_APPS + [
     'haystack',
 ]
 
-
+import os
 HAYSTACK_CONNECTIONS = {
     'default': {
         # For Solr:

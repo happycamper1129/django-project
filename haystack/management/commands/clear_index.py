@@ -1,9 +1,7 @@
-# encoding: utf-8
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-import sys
+from __future__ import print_function
+from __future__ import unicode_literals
 from optparse import make_option
+import sys
 
 from django.core.management.base import BaseCommand
 from django.utils import six
@@ -20,9 +18,6 @@ class Command(BaseCommand):
             help='Update only the named backend (can be used multiple times). '
                  'By default all backends will be updated.'
         ),
-        make_option('--nocommit', action='store_false', dest='commit',
-            default=True, help='Will pass commit=False to the backend.'
-        ),
     )
     option_list = BaseCommand.option_list + base_options
 
@@ -30,7 +25,6 @@ class Command(BaseCommand):
         """Clears out the search index completely."""
         from haystack import connections
         self.verbosity = int(options.get('verbosity', 1))
-        self.commit = options.get('commit', True)
 
         using = options.get('using')
         if not using:
@@ -53,7 +47,7 @@ class Command(BaseCommand):
 
         for backend_name in using:
             backend = connections[backend_name].get_backend()
-            backend.clear(commit=self.commit)
+            backend.clear()
 
         if self.verbosity >= 1:
             print("All documents removed.")

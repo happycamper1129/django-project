@@ -1,13 +1,9 @@
-# encoding: utf-8
-from __future__ import absolute_import, division, print_function, unicode_literals
-
+from __future__ import unicode_literals
 import re
-
-from django.template import Context, loader
-from django.utils import datetime_safe, six
-
+from django.utils import datetime_safe
+from django.utils import six
+from django.template import loader, Context
 from haystack.exceptions import SearchFieldError
-from haystack.utils import get_model_ct_tuple
 
 
 class NOT_PROVIDED:
@@ -84,7 +80,7 @@ class SearchField(object):
 
             for attr in attrs:
                 if not hasattr(current_object, attr):
-                    raise SearchFieldError("The model '%s' does not have a model_attr '%s'." % (repr(current_object), attr))
+                    raise SearchFieldError("The model '%s' does not have a model_attr '%s'." % (repr(obj), attr))
 
                 current_object = getattr(current_object, attr, None)
 
@@ -92,15 +88,15 @@ class SearchField(object):
                     if self.has_default():
                         current_object = self._default
                         # Fall out of the loop, given any further attempts at
-                        # accesses will fail miserably.
+                        # accesses will fail misreably.
                         break
                     elif self.null:
                         current_object = None
                         # Fall out of the loop, given any further attempts at
-                        # accesses will fail miserably.
+                        # accesses will fail misreably.
                         break
                     else:
-                        raise SearchFieldError("The model '%s' combined with model_attr '%s' returned None, but doesn't allow a default or null value." % (repr(obj), self.model_attr))
+                        raise SearchFieldError("The model '%s' has an empty model_attr '%s' and doesn't allow a default or null value." % (repr(obj), attr))
 
             if callable(current_object):
                 return current_object()
@@ -130,8 +126,7 @@ class SearchField(object):
             if not isinstance(template_names, (list, tuple)):
                 template_names = [template_names]
         else:
-            app_label, model_name = get_model_ct_tuple(obj)
-            template_names = ['search/indexes/%s/%s_%s.txt' % (app_label, model_name, self.instance_name)]
+            template_names = ['search/indexes/%s/%s_%s.txt' % (obj._meta.app_label, obj._meta.module_name, self.instance_name)]
 
         t = loader.select_template(template_names)
         return t.render(Context({'object': obj}))

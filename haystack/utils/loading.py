@@ -1,27 +1,13 @@
-# encoding: utf-8
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
+from __future__ import unicode_literals
 import copy
 import inspect
-import warnings
-
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.utils.datastructures import SortedDict
+from django.utils import importlib
 from django.utils.module_loading import module_has_submodule
-
+from haystack.constants import Indexable, DEFAULT_ALIAS
 from haystack.exceptions import NotHandled, SearchFieldError
-from haystack.utils import importlib
-from haystack.utils.app_loading import haystack_get_app_modules
-
-
-try:
-    # Introduced in Python 2.7
-    from collections import OrderedDict
-except ImportError:
-    # Deprecated in Django 1.8; removed in Django 1.9 (both of which require
-    # at least Python 2.7)
-    from django.utils.datastructures import SortedDict as OrderedDict
 
 
 def import_class(path):
@@ -159,8 +145,8 @@ class ConnectionRouter(object):
 class UnifiedIndex(object):
     # Used to collect all the indexes into a cohesive whole.
     def __init__(self, excluded_indexes=None):
-        self._indexes = {}
-        self.fields = OrderedDict()
+        self.indexes = {}
+        self.fields = SortedDict()
         self._built = False
         self.excluded_indexes = excluded_indexes or []
         self.excluded_indexes_ids = {}
@@ -168,19 +154,16 @@ class UnifiedIndex(object):
         self._fieldnames = {}
         self._facet_fieldnames = {}
 
-    @property
-    def indexes(self):
-        warnings.warn("'UnifiedIndex.indexes' was deprecated in Haystack v2.3.0. Please use UnifiedIndex.get_indexes().")
-        return self._indexes
-
     def collect_indexes(self):
         indexes = []
 
-        for app_mod in haystack_get_app_modules():
+        for app in settings.INSTALLED_APPS:
+            mod = importlib.import_module(app)
+
             try:
-                search_index_module = importlib.import_module("%s.search_indexes" % app_mod.__name__)
+                search_index_module = importlib.import_module("%s.search_indexes" % app)
             except ImportError:
-                if module_has_submodule(app_mod, 'search_indexes'):
+                if module_has_submodule(mod, 'search_indexes'):
                     raise
 
                 continue
@@ -188,7 +171,7 @@ class UnifiedIndex(object):
             for item_name, item in inspect.getmembers(search_index_module, inspect.isclass):
                 if getattr(item, 'haystack_use_for_indexing', False) and getattr(item, 'get_model', None):
                     # We've got an index. Check if we should be ignoring it.
-                    class_path = "%s.search_indexes.%s" % (app_mod.__name__, item_name)
+                    class_path = "%s.search_indexes.%s" % (app, item_name)
 
                     if class_path in self.excluded_indexes or self.excluded_indexes_ids.get(item_name) == id(item):
                         self.excluded_indexes_ids[str(item_name)] = id(item)
@@ -199,8 +182,8 @@ class UnifiedIndex(object):
         return indexes
 
     def reset(self):
-        self._indexes = {}
-        self.fields = OrderedDict()
+        self.indexes = {}
+        self.fields = SortedDict()
         self._built = False
         self._fieldnames = {}
         self._facet_fieldnames = {}
@@ -214,16 +197,16 @@ class UnifiedIndex(object):
         for index in indexes:
             model = index.get_model()
 
-            if model in self._indexes:
+            if model in self.indexes:
                 raise ImproperlyConfigured(
                     "Model '%s' has more than one 'SearchIndex`` handling it. "
                     "Please exclude either '%s' or '%s' using the 'EXCLUDED_INDEXES' "
                     "setting defined in 'settings.HAYSTACK_CONNECTIONS'." % (
-                        model, self._indexes[model], index
+                        model, self.indexes[model], index
                     )
                 )
 
-            self._indexes[model] = index
+            self.indexes[model] = index
             self.collect_fields(index)
 
         self._built = True
@@ -249,7 +232,7 @@ class UnifiedIndex(object):
                     self._facet_fieldnames[field_object.instance_name] = fieldname
 
             # Copy the field in so we've got a unified schema.
-            if field_object.index_fieldname not in self.fields:
+            if not field_object.index_fieldname in self.fields:
                 self.fields[field_object.index_fieldname] = field_object
                 self.fields[field_object.index_fieldname] = copy.copy(field_object)
             else:
@@ -257,7 +240,7 @@ class UnifiedIndex(object):
                 # safely ignore this. The exception is ``MultiValueField``,
                 # in which case we'll use it instead, copying over the
                 # values.
-                if field_object.is_multivalued:
+                if field_object.is_multivalued == True:
                     old_field = self.fields[field_object.index_fieldname]
                     self.fields[field_object.index_fieldname] = field_object
                     self.fields[field_object.index_fieldname] = copy.copy(field_object)
@@ -284,15 +267,11 @@ class UnifiedIndex(object):
                 if field_object.null is True:
                     self.fields[field_object.index_fieldname].null = True
 
-    def get_indexes(self):
+    def get_indexed_models(self):
         if not self._built:
             self.build()
 
-        return self._indexes
-
-    def get_indexed_models(self):
-        # Ensuring a list here since Python3 will give us an iterator
-        return list(self.get_indexes().keys())
+        return list(self.indexes.keys())
 
     def get_index_fieldname(self, field):
         if not self._built:
@@ -301,13 +280,13 @@ class UnifiedIndex(object):
         return self._fieldnames.get(field) or field
 
     def get_index(self, model_klass):
+        if not self._built:
+            self.build()
 
-        indexes = self.get_indexes()
+        if model_klass not in self.indexes:
+            raise NotHandled('The model %s is not registered' % model_klass.__class__)
 
-        if model_klass not in indexes:
-            raise NotHandled('The model %s is not registered' % model_klass)
-
-        return indexes[model_klass]
+        return self.indexes[model_klass]
 
     def get_facet_fieldname(self, field):
         if not self._built:

@@ -13,7 +13,8 @@ Elasticsearch_, Whoosh_, Xapian_, etc.) without having to modify your code.
 
 .. note::
 
-    This documentation represents Haystack 2.x. For old versions of the documentation: `1.2`_, `1.1`_.
+    This documentation represents the development version of Haystack (2.0.x).
+    For old versions of the documentation: `1.2`_, `1.1`_.
 
 .. _`1.2`: http://django-haystack.readthedocs.org/en/v1.2.6/index.html
 .. _`1.1`: http://django-haystack.readthedocs.org/en/v1.1/index.html
@@ -65,7 +66,6 @@ you may want to include in your application.
    multiple_index
    rich_content_extraction
    spatial
-   admin
 
 
 Reference
@@ -110,8 +110,8 @@ Requirements
 
 Haystack has a relatively easily-met set of requirements.
 
-* Python 2.7+ or Python 3.3+
-* Django 1.6+
+* Python 2.6+ or Python 3.3+
+* Django 1.5+
 
 Additionally, each backend has its own requirements. You should refer to
 :doc:`installing_search_engines` for more details.
