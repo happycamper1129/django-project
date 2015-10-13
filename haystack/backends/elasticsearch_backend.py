@@ -1,23 +1,29 @@
-from __future__ import unicode_literals
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import datetime
 import re
 import warnings
+
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.db.models.loading import get_model
 from django.utils import six
+
 import haystack
 from haystack.backends import BaseEngine, BaseSearchBackend, BaseSearchQuery, log_query
-from haystack.constants import ID, DJANGO_CT, DJANGO_ID, DEFAULT_OPERATOR
-from haystack.exceptions import MissingDependency, MoreLikeThisError
-from haystack.inputs import PythonData, Clean, Exact, Raw
+from haystack.constants import DEFAULT_OPERATOR, DJANGO_CT, DJANGO_ID, ID
+from haystack.exceptions import MissingDependency, MoreLikeThisError, SkipDocument
+from haystack.inputs import Clean, Exact, PythonData, Raw
 from haystack.models import SearchResult
-from haystack.utils import get_identifier
 from haystack.utils import log as logging
+from haystack.utils import get_identifier, get_model_ct
+from haystack.utils.app_loading import haystack_get_model
 
 try:
     import elasticsearch
     from elasticsearch.helpers import bulk_index
+    from elasticsearch.exceptions import NotFoundError
 except ImportError:
     raise MissingDependency("The 'elasticsearch' backend requires the installation of 'elasticsearch'. Please refer to the documentation.")
 
@@ -50,13 +56,13 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
                 "analyzer": {
                     "ngram_analyzer": {
                         "type": "custom",
-                        "tokenizer": "lowercase",
-                        "filter": ["haystack_ngram"]
+                        "tokenizer": "standard",
+                        "filter": ["haystack_ngram", "lowercase"]
                     },
                     "edgengram_analyzer": {
                         "type": "custom",
-                        "tokenizer": "lowercase",
-                        "filter": ["haystack_edgengram"]
+                        "tokenizer": "standard",
+                        "filter": ["haystack_edgengram", "lowercase"]
                     }
                 },
                 "tokenizer": {
@@ -112,6 +118,8 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
         # mapping.
         try:
             self.existing_mapping = self.conn.indices.get_mapping(index=self.index_name)
+        except NotFoundError:
+            pass
         except Exception:
             if not self.silently_fail:
                 raise
@@ -131,7 +139,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
         if current_mapping != self.existing_mapping:
             try:
                 # Make sure the index is there first.
-                self.conn.indices.create(self.index_name, self.DEFAULT_SETTINGS)
+                self.conn.indices.create(index=self.index_name, body=self.DEFAULT_SETTINGS, ignore=400)
                 self.conn.indices.put_mapping(index=self.index_name, doc_type='modelresult', body=current_mapping)
                 self.existing_mapping = current_mapping
             except Exception:
@@ -164,6 +172,8 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
                 final_data['_id'] = final_data[ID]
 
                 prepped_docs.append(final_data)
+            except SkipDocument:
+                self.log.debug(u"Indexing for object `%s` skipped", obj)
             except elasticsearch.TransportError as e:
                 if not self.silently_fail:
                     raise
@@ -222,7 +232,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
                 models_to_delete = []
 
                 for model in models:
-                    models_to_delete.append("%s:%s.%s" % (DJANGO_CT, model._meta.app_label, model._meta.module_name))
+                    models_to_delete.append("%s:%s" % (DJANGO_CT, get_model_ct(model)))
 
                 # Delete by query in Elasticsearch asssumes you're dealing with
                 # a ``query`` root object. :/
@@ -354,7 +364,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
                 interval = value.get('gap_by').lower()
 
                 # Need to detect on amount (can't be applied on months or years).
-                if value.get('gap_amount', 1) != 1 and not interval in ('month', 'year'):
+                if value.get('gap_amount', 1) != 1 and interval not in ('month', 'year'):
                     # Just the first character is valid for use.
                     interval = "%s%s" % (value['gap_amount'], interval[:1])
 
@@ -389,7 +399,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             limit_to_registered_models = getattr(settings, 'HAYSTACK_LIMIT_TO_REGISTERED_MODELS', True)
 
         if models and len(models):
-            model_choices = sorted(['%s.%s' % (model._meta.app_label, model._meta.module_name) for model in models])
+            model_choices = sorted(get_model_ct(model) for model in models)
         elif limit_to_registered_models:
             # Using narrow queries, limit the results to only models handled
             # with the current routers.
@@ -434,9 +444,20 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
 
         if dwithin is not None:
             lng, lat = dwithin['point'].get_coords()
+
+            # NB: the 1.0.0 release of elasticsearch introduce an
+            #     incompatible change on the distance filter formating
+            if elasticsearch.VERSION >= (1, 0, 0):
+                distance = "%(dist).6f%(unit)s" % {
+                        'dist': dwithin['distance'].km,
+                        'unit': "km"
+                    }
+            else:
+                distance = dwithin['distance'].km
+
             dwithin_filter = {
                 "geo_distance": {
-                    "distance": dwithin['distance'].km,
+                    "distance": distance,
                     dwithin['field']: {
                         "lat": lat,
                         "lon": lng
@@ -484,7 +505,8 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
         try:
             raw_results = self.conn.search(body=search_kwargs,
                                            index=self.index_name,
-                                           doc_type='modelresult')
+                                           doc_type='modelresult',
+                                           _source=True)
         except elasticsearch.TransportError as e:
             if not self.silently_fail:
                 raise
@@ -493,9 +515,10 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             raw_results = {}
 
         return self._process_results(raw_results,
-            highlight=kwargs.get('highlight'),
-            result_class=kwargs.get('result_class', SearchResult),
-            distance_point=kwargs.get('distance_point'), geo_sort=geo_sort)
+                                     highlight=kwargs.get('highlight'),
+                                     result_class=kwargs.get('result_class', SearchResult),
+                                     distance_point=kwargs.get('distance_point'),
+                                     geo_sort=geo_sort)
 
     def more_like_this(self, model_instance, additional_query_string=None,
                        start_offset=0, end_offset=None, models=None,
@@ -574,7 +597,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             source = raw_result['_source']
             app_label, model_name = source[DJANGO_CT].split('.')
             additional_fields = {}
-            model = get_model(app_label, model_name)
+            model = haystack_get_model(app_label, model_name)
 
             if model and model in indexed_models:
                 for key, value in source.items():
@@ -703,12 +726,12 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
 #            the right type of storage?
 DEFAULT_FIELD_MAPPING = {'type': 'string', 'analyzer': 'snowball'}
 FIELD_MAPPINGS = {
-    'edge_ngram': {'type': 'string', 'analyzer': 'edgengram_analyzer'},        
-    'ngram':      {'type': 'string', 'analyzer': 'ngram_analyzer'},        
+    'edge_ngram': {'type': 'string', 'analyzer': 'edgengram_analyzer'},
+    'ngram':      {'type': 'string', 'analyzer': 'ngram_analyzer'},
     'date':       {'type': 'date'},
     'datetime':   {'type': 'date'},
 
-    'location':   {'type': 'geo_point'},        
+    'location':   {'type': 'geo_point'},
     'boolean':    {'type': 'boolean'},
     'float':      {'type': 'float'},
     'long':       {'type': 'long'},
@@ -721,25 +744,6 @@ FIELD_MAPPINGS = {
 class ElasticsearchSearchQuery(BaseSearchQuery):
     def matching_all_fragment(self):
         return '*:*'
-
-    def add_spatial(self, lat, lon, sfield, distance, filter='bbox'):
-        """Adds spatial query parameters to search query"""
-        kwargs = {
-            'lat': lat,
-            'long': long,
-            'sfield': sfield,
-            'distance': distance,
-        }
-        self.spatial_query.update(kwargs)
-
-    def add_order_by_distance(self, lat, long, sfield):
-        """Orders the search result by distance from point."""
-        kwargs = {
-            'lat': lat,
-            'long': long,
-            'sfield': sfield,
-        }
-        self.order_by_distance.update(kwargs)
 
     def build_query_fragment(self, field, filter_type, value):
         from haystack import connections

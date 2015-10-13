@@ -1,12 +1,17 @@
-from __future__ import unicode_literals
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import operator
 import warnings
+
 from django.utils import six
-from haystack import connections, connection_router
+
+from haystack import connection_router, connections
 from haystack.backends import SQ
-from haystack.constants import REPR_OUTPUT_SIZE, ITERATOR_LOAD_PER_QUERY, DEFAULT_OPERATOR
+from haystack.constants import DEFAULT_OPERATOR, ITERATOR_LOAD_PER_QUERY, REPR_OUTPUT_SIZE
 from haystack.exceptions import NotHandled
-from haystack.inputs import Raw, Clean, AutoQuery
+from haystack.inputs import AutoQuery, Clean, Raw
 from haystack.utils import log as logging
 
 
@@ -194,13 +199,11 @@ class SearchQuerySet(object):
 
         # Check if we wish to load all objects.
         if self._load_all:
-            original_results = []
             models_pks = {}
             loaded_objects = {}
 
             # Remember the search position for each result so we don't have to resort later.
             for result in results:
-                original_results.append(result)
                 models_pks.setdefault(result.model, []).append(result.pk)
 
             # Load the objects for each model in turn.
@@ -319,12 +322,6 @@ class SearchQuerySet(object):
 
         return clone
 
-    def order_by_distance(self, **kwargs):
-        """Alters the order in which the results should appear."""
-        clone = self._clone()
-        clone.query.add_order_by_distance(**kwargs)
-        return clone
-
     def highlight(self):
         """Adds highlighting to the results."""
         clone = self._clone()
@@ -417,6 +414,13 @@ class SearchQuerySet(object):
 
     def narrow(self, query):
         """Pushes existing facet choices into the search."""
+
+        if isinstance(query, SQ):
+            # produce query string using empty query of the same class
+            empty_query = self.query._clone()
+            empty_query._reset()
+            query = query.as_query_string(empty_query.build_query_fragment)
+
         clone = self._clone()
         clone.query.add_narrow_query(query)
         return clone
@@ -674,8 +678,11 @@ class RelatedSearchQuerySet(SearchQuerySet):
     far less efficient but needs to fill the cache before it to maintain
     consistency.
     """
-    _load_all_querysets = {}
-    _result_cache = []
+
+    def __init__(self, *args, **kwargs):
+        super(RelatedSearchQuerySet, self).__init__(*args, **kwargs)
+        self._load_all_querysets = {}
+        self._result_cache = []
 
     def _cache_is_full(self):
         return len(self._result_cache) >= len(self)
@@ -722,13 +729,11 @@ class RelatedSearchQuerySet(SearchQuerySet):
 
         # Check if we wish to load all objects.
         if self._load_all:
-            original_results = []
             models_pks = {}
             loaded_objects = {}
 
             # Remember the search position for each result so we don't have to resort later.
             for result in results:
-                original_results.append(result)
                 models_pks.setdefault(result.model, []).append(result.pk)
 
             # Load the objects for each model in turn.
