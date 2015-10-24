@@ -4,6 +4,7 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.utils import six
@@ -48,7 +49,7 @@ class SearchResult(object):
         self.log = self._get_log()
 
         for key, value in kwargs.items():
-            if key not in self.__dict__:
+            if not key in self.__dict__:
                 self.__dict__[key] = value
                 self._additional_fields.append(key)
 
@@ -199,6 +200,7 @@ class SearchResult(object):
         """
         if self._stored_fields is None:
             from haystack import connections
+            from haystack.exceptions import NotHandled
 
             try:
                 index = connections['default'].get_unified_index().get_index(self.model)

@@ -63,9 +63,12 @@ class SolrSearchBackend(BaseSearchBackend):
                 # We'll log the object identifier but won't include the actual object
                 # to avoid the possibility of that generating encoding errors while
                 # processing the log message:
-                self.log.error(u"UnicodeDecodeError while preparing object for update", exc_info=True,
-                               extra={"data": {"index": index,
-                                               "object": get_identifier(obj)}})
+                self.log.error(u"UnicodeDecodeError while preparing object for update", exc_info=True, extra={
+                    "data": {
+                        "index": index,
+                        "object": get_identifier(obj)
+                    }
+                })
 
         if len(docs) > 0:
             try:
@@ -74,7 +77,7 @@ class SolrSearchBackend(BaseSearchBackend):
                 if not self.silently_fail:
                     raise
 
-                self.log.error("Failed to add documents to Solr: %s", e, exc_info=True)
+                self.log.error("Failed to add documents to Solr: %s", e)
 
     def remove(self, obj_or_string, commit=True):
         solr_id = get_identifier(obj_or_string)
@@ -89,14 +92,11 @@ class SolrSearchBackend(BaseSearchBackend):
             if not self.silently_fail:
                 raise
 
-            self.log.error("Failed to remove document '%s' from Solr: %s", solr_id, e, exc_info=True)
+            self.log.error("Failed to remove document '%s' from Solr: %s", solr_id, e)
 
-    def clear(self, models=None, commit=True):
-        if models is not None:
-            assert isinstance(models, (list, tuple))
-
+    def clear(self, models=[], commit=True):
         try:
-            if models is None:
+            if not models:
                 # *:* matches all docs in Solr
                 self.conn.delete(q='*:*', commit=commit)
             else:
@@ -114,11 +114,10 @@ class SolrSearchBackend(BaseSearchBackend):
             if not self.silently_fail:
                 raise
 
-            if models is not None:
-                self.log.error("Failed to clear Solr index of models '%s': %s", ','.join(models_to_delete), e,
-                               exc_info=True)
+            if len(models):
+                self.log.error("Failed to clear Solr index of models '%s': %s", ','.join(models_to_delete), e)
             else:
-                self.log.error("Failed to clear Solr index: %s", e, exc_info=True)
+                self.log.error("Failed to clear Solr index: %s", e)
 
     @log_query
     def search(self, query_string, **kwargs):
@@ -136,7 +135,7 @@ class SolrSearchBackend(BaseSearchBackend):
             if not self.silently_fail:
                 raise
 
-            self.log.error("Failed to query Solr using '%s': %s", query_string, e, exc_info=True)
+            self.log.error("Failed to query Solr using '%s': %s", query_string, e)
             raw_results = EmptyResults()
 
         return self._process_results(raw_results, highlight=kwargs.get('highlight'), result_class=kwargs.get('result_class', SearchResult), distance_point=kwargs.get('distance_point'))
@@ -334,8 +333,7 @@ class SolrSearchBackend(BaseSearchBackend):
             if not self.silently_fail:
                 raise
 
-            self.log.error("Failed to fetch More Like This from Solr for document '%s': %s",
-                           query, e, exc_info=True)
+            self.log.error("Failed to fetch More Like This from Solr for document '%s': %s", query, e)
             raw_results = EmptyResults()
 
         return self._process_results(raw_results, result_class=result_class)
