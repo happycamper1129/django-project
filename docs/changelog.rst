@@ -7,13 +7,6 @@ Changelog
 New
 ~~~
 
-- `update_index` will retry after backend failures. [Gilad Beeri]
-
-  Now `update_index` will retry failures multiple times before aborting
-  with a progressive time delay.
-
-  Thanks to Gilad Beeri (@giladbeeri) for the patch
-
 - `highlight()` accepts custom values on Solr and ES. [Chris Adams]
 
   This allows the default values to be overriden and arbitrary
@@ -52,13 +45,6 @@ New
 
 Changes
 ~~~~~~~
-
-- Update_index logging & multiprocessing improvements. [Chris Adams]
-
-  * Since older versions of Python are no longer supported we no
-    longer conditionally import multiprocessing (see #1001)
-  * Use multiprocessing.log_to_stderr for all messages
-  * Remove previously-disabled use of the multiprocessing workers for index removals, allowing the worker code to be simplified
 
 - Moved signal processor loading to app_config.ready. [Chris Adams]
 
@@ -110,8 +96,6 @@ Fix
 
 Other
 ~~~~~
-
-- PEP-8. [Chris Adams]
 
 - Merge pull request #1225 from gregplaysguitar/patch-1. [Chris Adams]
 
@@ -2251,8 +2235,9 @@ v2.0.0 (2013-05-12)
 - Fixed an ES test that seems like a change in behavior in recent ES
   versions. [Jannis Leidel]
 
-- Merge branch 'sq-run-refactor' of https://github.com/mattdeboard
-  /django-haystack into mattdeboard-sq-run-refactor. [Jannis Leidel]
+- Merge branch 'sq-run-refactor' of
+  https://github.com/mattdeboard/django-haystack into mattdeboard-sq-
+  run-refactor. [Jannis Leidel]
 
 - Refactor Solr & ES SearchQuery subclasses to use the ``build_params``
   from ``BaseSearchQuery`` to build the kwargs to be passed to the

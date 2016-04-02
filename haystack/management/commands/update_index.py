@@ -2,9 +2,9 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-import multiprocessing
 import os
-import time
+import sys
+import warnings
 from datetime import timedelta
 from optparse import make_option
 
@@ -19,21 +19,11 @@ from haystack.utils.app_loading import haystack_get_models, haystack_load_apps
 
 DEFAULT_BATCH_SIZE = None
 DEFAULT_AGE = None
-DEFAULT_MAX_RETRIES = 5
 APP = 'app'
 MODEL = 'model'
 
-LOG = multiprocessing.log_to_stderr(level=logging.WARNING)
 
-
-def update_worker(args):
-    if len(args) != 10:
-        LOG.error('update_worker received incorrect arguments: %r', args)
-        raise ValueError('update_worker received incorrect arguments')
-
-    model, start, end, total, using, start_date, end_date, verbosity, commit, max_retries = args
-
-    # FIXME: confirm that this is still relevant with modern versions of Django:
+def worker(bits):
     # We need to reset the connections, otherwise the different processes
     # will try to share the connection, which causes things to blow up.
     from django.db import connections
@@ -51,66 +41,38 @@ def update_worker(args):
             except KeyError:
                 pass
 
+    if bits[0] == 'do_update':
+        func, model, start, end, total, using, start_date, end_date, verbosity, commit = bits
+    elif bits[0] == 'do_remove':
+        func, model, pks_seen, start, upper_bound, using, verbosity, commit = bits
+    else:
+        return
+
     unified_index = haystack_connections[using].get_unified_index()
     index = unified_index.get_index(model)
     backend = haystack_connections[using].get_backend()
 
-    qs = index.build_queryset(start_date=start_date, end_date=end_date)
-    do_update(backend, index, qs, start, end, total, verbosity, commit, max_retries)
+    if func == 'do_update':
+        qs = index.build_queryset(start_date=start_date, end_date=end_date)
+        do_update(backend, index, qs, start, end, total, verbosity=verbosity, commit=commit)
+    else:
+        raise NotImplementedError('Unknown function %s' % func)
 
 
-def do_update(backend, index, qs, start, end, total, verbosity=1, commit=True,
-              max_retries=DEFAULT_MAX_RETRIES):
-
+def do_update(backend, index, qs, start, end, total, verbosity=1, commit=True):
     # Get a clone of the QuerySet so that the cache doesn't bloat up
     # in memory. Useful when reindexing large amounts of data.
     small_cache_qs = qs.all()
     current_qs = small_cache_qs[start:end]
 
-    is_parent_process = hasattr(os, 'getppid') and os.getpid() == os.getppid()
-
     if verbosity >= 2:
-        if is_parent_process:
+        if hasattr(os, 'getppid') and os.getpid() == os.getppid():
             print("  indexed %s - %d of %d." % (start + 1, end, total))
         else:
             print("  indexed %s - %d of %d (by %s)." % (start + 1, end, total, os.getpid()))
 
-    retries = 0
-    while retries < max_retries:
-        try:
-            # FIXME: Get the right backend.
-            backend.update(index, current_qs, commit=commit)
-            if verbosity >= 2 and retries:
-                print('Completed indexing {} - {}, tried {}/{} times'.format(start + 1,
-                                                                             end,
-                                                                             retries + 1,
-                                                                             max_retries))
-            break
-        except Exception as exc:
-            # Catch all exceptions which do not normally trigger a system exit, excluding SystemExit and
-            # KeyboardInterrupt. This avoids needing to import the backend-specific exception subclasses
-            # from pysolr, elasticsearch, whoosh, requests, etc.
-            retries += 1
-
-            error_context = {'start': start + 1,
-                             'end': end,
-                             'retries': retries,
-                             'max_retries': max_retries,
-                             'pid': os.getpid(),
-                             'exc': exc}
-
-            error_msg = 'Failed indexing %(start)s - %(end)s (retry %(retries)s/%(max_retries)s): %(exc)s'
-            if not is_parent_process:
-                error_msg += ' (pid %(pid)s): %(exc)s'
-
-            if retries >= max_retries:
-                LOG.error(error_msg, exc_info=True, **error_context)
-                raise
-            elif verbosity >= 2:
-                LOG.warning(error_msg, exc_info=True, **error_context)
-
-            # If going to try again, sleep a bit before
-            time.sleep(2 ** retries)
+    # FIXME: Get the right backend.
+    backend.update(index, current_qs, commit=commit)
 
     # Clear out the DB connections queries because it bloats up RAM.
     reset_queries()
@@ -120,30 +82,36 @@ class Command(LabelCommand):
     help = "Freshens the index for the given app(s)."
     base_options = (
         make_option('-a', '--age', action='store', dest='age',
-                    default=DEFAULT_AGE, type='int',
-                    help='Number of hours back to consider objects new.'),
-        make_option('-s', '--start', action='store', dest='start_date', default=None, type='string',
-                    help='The start date for indexing within. Can be any dateutil-parsable string,'
-                         ' recommended to be YYYY-MM-DDTHH:MM:SS.'),
-        make_option('-e', '--end', action='store', dest='end_date', default=None, type='string',
-                    help='The end date for indexing within. Can be any dateutil-parsable string,'
-                         ' recommended to be YYYY-MM-DDTHH:MM:SS.'),
-        make_option('-b', '--batch-size', action='store', dest='batchsize', default=None, type='int',
-                    help='Number of items to index at once.'),
-        make_option('-r', '--remove', action='store_true', dest='remove', default=False,
-                    help='Remove objects from the index that are no longer present in the database.'),
+            default=DEFAULT_AGE, type='int',
+            help='Number of hours back to consider objects new.'
+        ),
+        make_option('-s', '--start', action='store', dest='start_date',
+            default=None, type='string',
+            help='The start date for indexing within. Can be any dateutil-parsable string, recommended to be YYYY-MM-DDTHH:MM:SS.'
+        ),
+        make_option('-e', '--end', action='store', dest='end_date',
+            default=None, type='string',
+            help='The end date for indexing within. Can be any dateutil-parsable string, recommended to be YYYY-MM-DDTHH:MM:SS.'
+        ),
+        make_option('-b', '--batch-size', action='store', dest='batchsize',
+            default=None, type='int',
+            help='Number of items to index at once.'
+        ),
+        make_option('-r', '--remove', action='store_true', dest='remove',
+            default=False, help='Remove objects from the index that are no longer present in the database.'
+        ),
         make_option("-u", "--using", action="append", dest="using",
-                    default=[],
-                    help='Update only the named backend (can be used multiple times). '
-                         'By default all backends will be updated.'),
-        make_option('-k', '--workers', action='store', dest='workers', default=0, type='int',
-                    help='Allows for the use multiple workers to parallelize indexing.'),
-        make_option('--nocommit', action='store_false', dest='commit', default=True,
-                    help='Will pass commit=False to the backend.'),
-        make_option('-t', '--max-retries', action='store', dest='max_retries',
-                    type='int',
-                    default=DEFAULT_MAX_RETRIES,
-                    help='Maximum number of attempts to write to the backend when an error occurs.'),
+            default=[],
+            help='Update only the named backend (can be used multiple times). '
+                 'By default all backends will be updated.'
+        ),
+        make_option('-k', '--workers', action='store', dest='workers',
+            default=0, type='int',
+            help='Allows for the use multiple workers to parallelize indexing. Requires multiprocessing.'
+        ),
+        make_option('--nocommit', action='store_false', dest='commit',
+            default=True, help='Will pass commit=False to the backend.'
+        ),
     )
     option_list = LabelCommand.option_list + base_options
 
@@ -155,7 +123,11 @@ class Command(LabelCommand):
         self.remove = options.get('remove', False)
         self.workers = int(options.get('workers', 0))
         self.commit = options.get('commit', True)
-        self.max_retries = options.get('max_retries', DEFAULT_MAX_RETRIES)
+
+        if sys.version_info < (2, 7):
+            warnings.warn('multiprocessing is disabled on Python 2.6 and earlier. '
+                          'See https://github.com/toastdriven/django-haystack/issues/1001')
+            self.workers = 0
 
         self.backends = options.get('using')
         if not self.backends:
@@ -164,11 +136,6 @@ class Command(LabelCommand):
         age = options.get('age', DEFAULT_AGE)
         start_date = options.get('start_date')
         end_date = options.get('end_date')
-
-        if self.verbosity > 2:
-            LOG.setLevel(logging.DEBUG)
-        elif self.verbosity > 1:
-            LOG.setLevel(logging.INFO)
 
         if age is not None:
             self.start_date = now() - timedelta(hours=int(age))
@@ -199,7 +166,7 @@ class Command(LabelCommand):
             try:
                 self.update_backend(label, using)
             except:
-                LOG.exception("Error updating %s using %s ", label, using)
+                logging.exception("Error updating %s using %s ", label, using)
                 raise
 
     def update_backend(self, label, using):
@@ -207,6 +174,9 @@ class Command(LabelCommand):
 
         backend = haystack_connections[using].get_backend()
         unified_index = haystack_connections[using].get_unified_index()
+
+        if self.workers > 0:
+            import multiprocessing
 
         for model in haystack_get_models(label):
             try:
@@ -239,15 +209,13 @@ class Command(LabelCommand):
                 end = min(start + batch_size, total)
 
                 if self.workers == 0:
-                    do_update(backend, index, qs, start, end, total, verbosity=self.verbosity,
-                              commit=self.commit, max_retries=self.max_retries)
+                    do_update(backend, index, qs, start, end, total, verbosity=self.verbosity, commit=self.commit)
                 else:
-                    ghetto_queue.append((model, start, end, total, using, self.start_date, self.end_date,
-                                         self.verbosity, self.commit, self.max_retries))
+                    ghetto_queue.append(('do_update', model, start, end, total, using, self.start_date, self.end_date, self.verbosity, self.commit))
 
             if self.workers > 0:
                 pool = multiprocessing.Pool(self.workers)
-                pool.map(update_worker, ghetto_queue)
+                pool.map(worker, ghetto_queue)
                 pool.close()
                 pool.join()
 
@@ -293,8 +261,7 @@ class Command(LabelCommand):
                         print("  removing %d stale records." % len(stale_records))
 
                     for rec_id in stale_records:
-                        # Since the PK was not in the database list, we'll delete the record from the search
-                        # index:
+                        # Since the PK was not in the database list, we'll delete the record from the search index:
                         if self.verbosity >= 2:
                             print("  removing %s." % rec_id)
 
