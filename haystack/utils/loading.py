@@ -1,21 +1,13 @@
-# encoding: utf-8
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
+from __future__ import unicode_literals
 import copy
 import inspect
-import threading
-import warnings
-from collections import OrderedDict
-
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.utils import six
+from django.utils.datastructures import SortedDict
+from django.utils import importlib
 from django.utils.module_loading import module_has_submodule
-
+from haystack.constants import Indexable, DEFAULT_ALIAS
 from haystack.exceptions import NotHandled, SearchFieldError
-from haystack.utils import importlib
-from haystack.utils.app_loading import haystack_get_app_modules
 
 
 def import_class(path):
@@ -86,7 +78,7 @@ def load_router(full_router_path):
 class ConnectionHandler(object):
     def __init__(self, connections_info):
         self.connections_info = connections_info
-        self.thread_local = threading.local()
+        self._connections = {}
         self._index = None
 
     def ensure_defaults(self, alias):
@@ -99,20 +91,16 @@ class ConnectionHandler(object):
             conn['ENGINE'] = 'haystack.backends.simple_backend.SimpleEngine'
 
     def __getitem__(self, key):
-        if not hasattr(self.thread_local, 'connections'):
-            self.thread_local.connections = {}
-        elif key in self.thread_local.connections:
-            return self.thread_local.connections[key]
+        if key in self._connections:
+            return self._connections[key]
 
         self.ensure_defaults(key)
-        self.thread_local.connections[key] = load_backend(self.connections_info[key]['ENGINE'])(using=key)
-        return self.thread_local.connections[key]
+        self._connections[key] = load_backend(self.connections_info[key]['ENGINE'])(using=key)
+        return self._connections[key]
 
     def reload(self, key):
-        if not hasattr(self.thread_local, 'connections'):
-            self.thread_local.connections = {}
         try:
-            del self.thread_local.connections[key]
+            del self._connections[key]
         except KeyError:
             pass
 
@@ -123,25 +111,18 @@ class ConnectionHandler(object):
 
 
 class ConnectionRouter(object):
-    def __init__(self):
-        self._routers = None
+    def __init__(self, routers_list=None):
+        self.routers_list = routers_list
+        self.routers = []
 
-    @property
-    def routers(self):
-        if self._routers is None:
-            default_routers = ['haystack.routers.DefaultRouter']
-            router_list = getattr(settings, 'HAYSTACK_ROUTERS', default_routers)
-            # in case HAYSTACK_ROUTERS is empty, fallback to default routers
-            if not len(router_list):
-                router_list = default_routers
+        if self.routers_list is None:
+            self.routers_list = ['haystack.routers.DefaultRouter']
 
-            self._routers = []
-            for router_path in router_list:
-                router_class = load_router(router_path)
-                self._routers.append(router_class())
-        return self._routers
+        for router_path in self.routers_list:
+            router_class = load_router(router_path)
+            self.routers.append(router_class())
 
-    def _for_action(self, action, many, **hints):
+    def for_action(self, action, **hints):
         conns = []
 
         for router in self.routers:
@@ -150,27 +131,22 @@ class ConnectionRouter(object):
                 connection_to_use = action_callable(**hints)
 
                 if connection_to_use is not None:
-                    if isinstance(connection_to_use, six.string_types):
-                        conns.append(connection_to_use)
-                    else:
-                        conns.extend(connection_to_use)
-                    if not many:
-                        break
+                    conns.append(connection_to_use)
 
         return conns
 
     def for_write(self, **hints):
-        return self._for_action('for_write', True, **hints)
+        return self.for_action('for_write', **hints)
 
     def for_read(self, **hints):
-        return self._for_action('for_read', False, **hints)[0]
+        return self.for_action('for_read', **hints)
 
 
 class UnifiedIndex(object):
     # Used to collect all the indexes into a cohesive whole.
     def __init__(self, excluded_indexes=None):
-        self._indexes = {}
-        self.fields = OrderedDict()
+        self.indexes = {}
+        self.fields = SortedDict()
         self._built = False
         self.excluded_indexes = excluded_indexes or []
         self.excluded_indexes_ids = {}
@@ -178,19 +154,16 @@ class UnifiedIndex(object):
         self._fieldnames = {}
         self._facet_fieldnames = {}
 
-    @property
-    def indexes(self):
-        warnings.warn("'UnifiedIndex.indexes' was deprecated in Haystack v2.3.0. Please use UnifiedIndex.get_indexes().")
-        return self._indexes
-
     def collect_indexes(self):
         indexes = []
 
-        for app_mod in haystack_get_app_modules():
+        for app in settings.INSTALLED_APPS:
+            mod = importlib.import_module(app)
+
             try:
-                search_index_module = importlib.import_module("%s.search_indexes" % app_mod.__name__)
+                search_index_module = importlib.import_module("%s.search_indexes" % app)
             except ImportError:
-                if module_has_submodule(app_mod, 'search_indexes'):
+                if module_has_submodule(mod, 'search_indexes'):
                     raise
 
                 continue
@@ -198,7 +171,7 @@ class UnifiedIndex(object):
             for item_name, item in inspect.getmembers(search_index_module, inspect.isclass):
                 if getattr(item, 'haystack_use_for_indexing', False) and getattr(item, 'get_model', None):
                     # We've got an index. Check if we should be ignoring it.
-                    class_path = "%s.search_indexes.%s" % (app_mod.__name__, item_name)
+                    class_path = "%s.search_indexes.%s" % (app, item_name)
 
                     if class_path in self.excluded_indexes or self.excluded_indexes_ids.get(item_name) == id(item):
                         self.excluded_indexes_ids[str(item_name)] = id(item)
@@ -209,8 +182,8 @@ class UnifiedIndex(object):
         return indexes
 
     def reset(self):
-        self._indexes = {}
-        self.fields = OrderedDict()
+        self.indexes = {}
+        self.fields = SortedDict()
         self._built = False
         self._fieldnames = {}
         self._facet_fieldnames = {}
@@ -224,16 +197,16 @@ class UnifiedIndex(object):
         for index in indexes:
             model = index.get_model()
 
-            if model in self._indexes:
+            if model in self.indexes:
                 raise ImproperlyConfigured(
                     "Model '%s' has more than one 'SearchIndex`` handling it. "
                     "Please exclude either '%s' or '%s' using the 'EXCLUDED_INDEXES' "
                     "setting defined in 'settings.HAYSTACK_CONNECTIONS'." % (
-                        model, self._indexes[model], index
+                        model, self.indexes[model], index
                     )
                 )
 
-            self._indexes[model] = index
+            self.indexes[model] = index
             self.collect_fields(index)
 
         self._built = True
@@ -259,7 +232,7 @@ class UnifiedIndex(object):
                     self._facet_fieldnames[field_object.instance_name] = fieldname
 
             # Copy the field in so we've got a unified schema.
-            if field_object.index_fieldname not in self.fields:
+            if not field_object.index_fieldname in self.fields:
                 self.fields[field_object.index_fieldname] = field_object
                 self.fields[field_object.index_fieldname] = copy.copy(field_object)
             else:
@@ -267,7 +240,7 @@ class UnifiedIndex(object):
                 # safely ignore this. The exception is ``MultiValueField``,
                 # in which case we'll use it instead, copying over the
                 # values.
-                if field_object.is_multivalued:
+                if field_object.is_multivalued == True:
                     old_field = self.fields[field_object.index_fieldname]
                     self.fields[field_object.index_fieldname] = field_object
                     self.fields[field_object.index_fieldname] = copy.copy(field_object)
@@ -294,15 +267,11 @@ class UnifiedIndex(object):
                 if field_object.null is True:
                     self.fields[field_object.index_fieldname].null = True
 
-    def get_indexes(self):
+    def get_indexed_models(self):
         if not self._built:
             self.build()
 
-        return self._indexes
-
-    def get_indexed_models(self):
-        # Ensuring a list here since Python3 will give us an iterator
-        return list(self.get_indexes().keys())
+        return list(self.indexes.keys())
 
     def get_index_fieldname(self, field):
         if not self._built:
@@ -311,13 +280,13 @@ class UnifiedIndex(object):
         return self._fieldnames.get(field) or field
 
     def get_index(self, model_klass):
+        if not self._built:
+            self.build()
 
-        indexes = self.get_indexes()
+        if model_klass not in self.indexes:
+            raise NotHandled('The model %s is not registered' % model_klass.__class__)
 
-        if model_klass not in indexes:
-            raise NotHandled('The model %s is not registered' % model_klass)
-
-        return indexes[model_klass]
+        return self.indexes[model_klass]
 
     def get_facet_fieldname(self, field):
         if not self._built:

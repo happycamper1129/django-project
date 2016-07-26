@@ -1,11 +1,8 @@
-# encoding: utf-8
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
+from __future__ import unicode_literals
 from django import template
-from haystack.utils.app_loading import haystack_get_model
-
+from django.db import models
 from haystack.query import SearchQuerySet
+
 
 register = template.Library()
 
@@ -31,7 +28,7 @@ class MoreLikeThisNode(template.Node):
                 search_models = []
 
                 for model in for_types:
-                    model_class = haystack_get_model(*model.split('.'))
+                    model_class = models.get_model(*model.split('.'))
 
                     if model_class:
                         search_models.append(model_class)

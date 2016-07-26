@@ -1,21 +1,15 @@
-# encoding: utf-8
 """
 A very basic, ORM-based backend for simple search during tests.
 """
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from warnings import warn
-
+from __future__ import unicode_literals
 from django.conf import settings
 from django.db.models import Q
 from django.utils import six
-
 from haystack import connections
-from haystack.backends import BaseEngine, BaseSearchBackend, BaseSearchQuery, log_query, SearchNode
+from haystack.backends import BaseEngine, BaseSearchBackend, BaseSearchQuery, SearchNode, log_query
 from haystack.inputs import PythonData
 from haystack.models import SearchResult
-from haystack.utils import get_model_ct_tuple
+
 
 if settings.DEBUG:
     import logging
@@ -38,13 +32,16 @@ else:
 
 class SimpleSearchBackend(BaseSearchBackend):
     def update(self, indexer, iterable, commit=True):
-        warn('update is not implemented in this backend')
+        if logger is not None:
+            logger.warning('update is not implemented in this backend')
 
     def remove(self, obj, commit=True):
-        warn('remove is not implemented in this backend')
+        if logger is not None:
+            logger.warning('remove is not implemented in this backend')
 
-    def clear(self, models=None, commit=True):
-        warn('clear is not implemented in this backend')
+    def clear(self, models=[], commit=True):
+        if logger is not None:
+            logger.warning('clear is not implemented in this backend')
 
     @log_query
     def search(self, query_string, **kwargs):
@@ -76,14 +73,13 @@ class SimpleSearchBackend(BaseSearchBackend):
 
                             queries.append(Q(**{'%s__icontains' % field.name: term}))
 
-                        qs = model.objects.filter(six.moves.reduce(lambda x, y: x | y, queries))
+                        qs = model.objects.filter(six.moves.reduce(lambda x, y: x|y, queries))
 
                 hits += len(qs)
 
                 for match in qs:
                     match.__dict__.pop('score', None)
-                    app_label, model_name = get_model_ct_tuple(match)
-                    result = result_class(app_label, model_name, match.pk, 0, **match.__dict__)
+                    result = result_class(match._meta.app_label, match._meta.module_name, match.pk, 0, **match.__dict__)
                     # For efficiency.
                     result._model = match.__class__
                     result._object = match

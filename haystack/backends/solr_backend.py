@@ -1,21 +1,16 @@
-# encoding: utf-8
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
+from __future__ import unicode_literals
 import warnings
-
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.db.models.loading import get_model
 from django.utils import six
-
-from haystack.backends import BaseEngine, BaseSearchBackend, BaseSearchQuery, EmptyResults, log_query
-from haystack.constants import DJANGO_CT, DJANGO_ID, ID
-from haystack.exceptions import MissingDependency, MoreLikeThisError, SkipDocument
-from haystack.inputs import Clean, Exact, PythonData, Raw
+from haystack.backends import BaseEngine, BaseSearchBackend, BaseSearchQuery, log_query, EmptyResults
+from haystack.constants import ID, DJANGO_CT, DJANGO_ID
+from haystack.exceptions import MissingDependency, MoreLikeThisError
+from haystack.inputs import PythonData, Clean, Exact, Raw
 from haystack.models import SearchResult
+from haystack.utils import get_identifier
 from haystack.utils import log as logging
-from haystack.utils import get_identifier, get_model_ct
-from haystack.utils.app_loading import haystack_get_model
 
 try:
     from pysolr import Solr, SolrError
@@ -54,8 +49,6 @@ class SolrSearchBackend(BaseSearchBackend):
         for obj in iterable:
             try:
                 docs.append(index.full_prepare(obj))
-            except SkipDocument:
-                self.log.debug(u"Indexing for object `%s` skipped", obj)
             except UnicodeDecodeError:
                 if not self.silently_fail:
                     raise
@@ -63,9 +56,12 @@ class SolrSearchBackend(BaseSearchBackend):
                 # We'll log the object identifier but won't include the actual object
                 # to avoid the possibility of that generating encoding errors while
                 # processing the log message:
-                self.log.error(u"UnicodeDecodeError while preparing object for update", exc_info=True,
-                               extra={"data": {"index": index,
-                                               "object": get_identifier(obj)}})
+                self.log.error(u"UnicodeDecodeError while preparing object for update", exc_info=True, extra={
+                    "data": {
+                        "index": index,
+                        "object": get_identifier(obj)
+                    }
+                })
 
         if len(docs) > 0:
             try:
@@ -74,7 +70,7 @@ class SolrSearchBackend(BaseSearchBackend):
                 if not self.silently_fail:
                     raise
 
-                self.log.error("Failed to add documents to Solr: %s", e, exc_info=True)
+                self.log.error("Failed to add documents to Solr: %s", e)
 
     def remove(self, obj_or_string, commit=True):
         solr_id = get_identifier(obj_or_string)
@@ -89,36 +85,31 @@ class SolrSearchBackend(BaseSearchBackend):
             if not self.silently_fail:
                 raise
 
-            self.log.error("Failed to remove document '%s' from Solr: %s", solr_id, e, exc_info=True)
+            self.log.error("Failed to remove document '%s' from Solr: %s", solr_id, e)
 
-    def clear(self, models=None, commit=True):
-        if models is not None:
-            assert isinstance(models, (list, tuple))
-
+    def clear(self, models=[], commit=True):
         try:
-            if models is None:
+            if not models:
                 # *:* matches all docs in Solr
                 self.conn.delete(q='*:*', commit=commit)
             else:
                 models_to_delete = []
 
                 for model in models:
-                    models_to_delete.append("%s:%s" % (DJANGO_CT, get_model_ct(model)))
+                    models_to_delete.append("%s:%s.%s" % (DJANGO_CT, model._meta.app_label, model._meta.module_name))
 
                 self.conn.delete(q=" OR ".join(models_to_delete), commit=commit)
 
-            if commit:
-                # Run an optimize post-clear. http://wiki.apache.org/solr/FAQ#head-9aafb5d8dff5308e8ea4fcf4b71f19f029c4bb99
-                self.conn.optimize()
+            # Run an optimize post-clear. http://wiki.apache.org/solr/FAQ#head-9aafb5d8dff5308e8ea4fcf4b71f19f029c4bb99
+            self.conn.optimize()
         except (IOError, SolrError) as e:
             if not self.silently_fail:
                 raise
 
-            if models is not None:
-                self.log.error("Failed to clear Solr index of models '%s': %s", ','.join(models_to_delete), e,
-                               exc_info=True)
+            if len(models):
+                self.log.error("Failed to clear Solr index of models '%s': %s", ','.join(models_to_delete), e)
             else:
-                self.log.error("Failed to clear Solr index: %s", e, exc_info=True)
+                self.log.error("Failed to clear Solr index: %s", e)
 
     @log_query
     def search(self, query_string, **kwargs):
@@ -136,7 +127,7 @@ class SolrSearchBackend(BaseSearchBackend):
             if not self.silently_fail:
                 raise
 
-            self.log.error("Failed to query Solr using '%s': %s", query_string, e, exc_info=True)
+            self.log.error("Failed to query Solr using '%s': %s", query_string, e)
             raw_results = EmptyResults()
 
         return self._process_results(raw_results, highlight=kwargs.get('highlight'), result_class=kwargs.get('result_class', SearchResult), distance_point=kwargs.get('distance_point'))
@@ -147,8 +138,7 @@ class SolrSearchBackend(BaseSearchBackend):
                             narrow_queries=None, spelling_query=None,
                             within=None, dwithin=None, distance_point=None,
                             models=None, limit_to_registered_models=None,
-                            result_class=None, stats=None,
-                            **extra_kwargs):
+                            result_class=None, stats=None):
         kwargs = {'fl': '* score'}
 
         if fields:
@@ -181,15 +171,9 @@ class SolrSearchBackend(BaseSearchBackend):
         if end_offset is not None:
             kwargs['rows'] = end_offset - start_offset
 
-        if highlight:
-            # `highlight` can either be True or a dictionary containing custom parameters
-            # which will be passed to the backend and may override our default settings:
-
+        if highlight is True:
             kwargs['hl'] = 'true'
             kwargs['hl.fragsize'] = '200'
-
-            if isinstance(highlight, dict):
-                kwargs.update(highlight)
 
         if self.include_spelling is True:
             kwargs['spellcheck'] = 'true'
@@ -231,7 +215,7 @@ class SolrSearchBackend(BaseSearchBackend):
             limit_to_registered_models = getattr(settings, 'HAYSTACK_LIMIT_TO_REGISTERED_MODELS', True)
 
         if models and len(models):
-            model_choices = sorted(get_model_ct(model) for model in models)
+            model_choices = sorted(['%s.%s' % (model._meta.app_label, model._meta.module_name) for model in models])
         elif limit_to_registered_models:
             # Using narrow queries, limit the results to only models handled
             # with the current routers.
@@ -284,9 +268,6 @@ class SolrSearchBackend(BaseSearchBackend):
             # kwargs['fl'] += ' _dist_:geodist()'
             pass
 
-        if extra_kwargs:
-            kwargs.update(extra_kwargs)
-
         return kwargs
 
     def more_like_this(self, model_instance, additional_query_string=None,
@@ -316,7 +297,7 @@ class SolrSearchBackend(BaseSearchBackend):
             limit_to_registered_models = getattr(settings, 'HAYSTACK_LIMIT_TO_REGISTERED_MODELS', True)
 
         if models and len(models):
-            model_choices = sorted(get_model_ct(model) for model in models)
+            model_choices = sorted(['%s.%s' % (model._meta.app_label, model._meta.module_name) for model in models])
         elif limit_to_registered_models:
             # Using narrow queries, limit the results to only models handled
             # with the current routers.
@@ -344,8 +325,7 @@ class SolrSearchBackend(BaseSearchBackend):
             if not self.silently_fail:
                 raise
 
-            self.log.error("Failed to fetch More Like This from Solr for document '%s': %s",
-                           query, e, exc_info=True)
+            self.log.error("Failed to fetch More Like This from Solr for document '%s': %s", query, e)
             raw_results = EmptyResults()
 
         return self._process_results(raw_results, result_class=result_class)
@@ -377,16 +357,12 @@ class SolrSearchBackend(BaseSearchBackend):
                     # pairs.
                     facets[key][facet_field] = list(zip(facets[key][facet_field][::2], facets[key][facet_field][1::2]))
 
-        if self.include_spelling and hasattr(raw_results, 'spellcheck'):
-            # Solr 5+ changed the JSON response format so the suggestions will be key-value mapped rather
-            # than simply paired elements in a list, which is a nice improvement but incompatible with
-            # Solr 4: https://issues.apache.org/jira/browse/SOLR-3029
-            if len(raw_results.spellcheck.get('collations', [])):
-                spelling_suggestion = raw_results.spellcheck['collations'][-1]
-            elif len(raw_results.spellcheck.get('suggestions', [])):
-                spelling_suggestion = raw_results.spellcheck['suggestions'][-1]
-
-            assert spelling_suggestion is None or isinstance(spelling_suggestion, six.string_types)
+        if self.include_spelling is True:
+            if hasattr(raw_results, 'spellcheck'):
+                if len(raw_results.spellcheck.get('suggestions', [])):
+                    # For some reason, it's an array of pairs. Pull off the
+                    # collated result from the end.
+                    spelling_suggestion = raw_results.spellcheck.get('suggestions')[-1]
 
         unified_index = connections[self.connection_alias].get_unified_index()
         indexed_models = unified_index.get_indexed_models()
@@ -394,16 +370,12 @@ class SolrSearchBackend(BaseSearchBackend):
         for raw_result in raw_results.docs:
             app_label, model_name = raw_result[DJANGO_CT].split('.')
             additional_fields = {}
-            model = haystack_get_model(app_label, model_name)
+            model = get_model(app_label, model_name)
 
             if model and model in indexed_models:
-                index = unified_index.get_index(model)
-                index_field_map = index.field_map
                 for key, value in raw_result.items():
+                    index = unified_index.get_index(model)
                     string_key = str(key)
-                    # re-map key if alternate name used
-                    if string_key in index_field_map:
-                        string_key = index_field_map[key]
 
                     if string_key in index.fields and hasattr(index.fields[string_key], 'convert'):
                         additional_fields[string_key] = index.fields[string_key].convert(value)
@@ -535,6 +507,25 @@ class SolrSearchQuery(BaseSearchQuery):
     def matching_all_fragment(self):
         return '*:*'
 
+    def add_spatial(self, lat, lon, sfield, distance, filter='bbox'):
+        """Adds spatial query parameters to search query"""
+        kwargs = {
+            'lat': lat,
+            'long': long,
+            'sfield': sfield,
+            'distance': distance,
+        }
+        self.spatial_query.update(kwargs)
+
+    def add_order_by_distance(self, lat, long, sfield):
+        """Orders the search result by distance from point."""
+        kwargs = {
+            'lat': lat,
+            'long': long,
+            'sfield': sfield,
+        }
+        self.order_by_distance.update(kwargs)
+
     def build_query_fragment(self, field, filter_type, value):
         from haystack import connections
         query_frag = ''
@@ -572,13 +563,12 @@ class SolrSearchQuery(BaseSearchQuery):
             'gte': u'[%s TO *]',
             'lt': u'{* TO %s}',
             'lte': u'[* TO %s]',
-            'fuzzy': u'%s~',
         }
 
         if value.post_process is False:
             query_frag = prepared_value
         else:
-            if filter_type in ['contains', 'startswith', 'fuzzy']:
+            if filter_type in ['contains', 'startswith']:
                 if value.input_type_name == 'exact':
                     query_frag = prepared_value
                 else:
@@ -595,13 +585,10 @@ class SolrSearchQuery(BaseSearchQuery):
             elif filter_type == 'in':
                 in_options = []
 
-                if not prepared_value:
-                    query_frag = u'(!*:*)'
-                else:
-                    for possible_value in prepared_value:
-                        in_options.append(u'"%s"' % self.backend.conn._from_python(possible_value))
+                for possible_value in prepared_value:
+                    in_options.append(u'"%s"' % self.backend.conn._from_python(possible_value))
 
-                    query_frag = u"(%s)" % " OR ".join(in_options)
+                query_frag = u"(%s)" % " OR ".join(in_options)
             elif filter_type == 'range':
                 start = self.backend.conn._from_python(prepared_value[0])
                 end = self.backend.conn._from_python(prepared_value[1])
@@ -692,8 +679,6 @@ class SolrSearchQuery(BaseSearchQuery):
 
         if spelling_query:
             search_kwargs['spelling_query'] = spelling_query
-        elif self.spelling_query:
-            search_kwargs['spelling_query'] = self.spelling_query
 
         if self.stats:
             search_kwargs['stats'] = self.stats

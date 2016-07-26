@@ -1,37 +1,43 @@
-# encoding: utf-8
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-import logging
-import multiprocessing
-import os
-import time
+from __future__ import print_function
+from __future__ import unicode_literals
 from datetime import timedelta
+from optparse import make_option
+import logging
+import os
 
-from django.core.management.base import BaseCommand
-from django.db import close_old_connections, reset_queries
-from django.utils.encoding import force_text, smart_bytes
-from django.utils.timezone import now
+from django import db
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
+from django.core.management.base import LabelCommand
+from django.db import reset_queries
 
 from haystack import connections as haystack_connections
-from haystack.exceptions import NotHandled
 from haystack.query import SearchQuerySet
-from haystack.utils.app_loading import haystack_get_models, haystack_load_apps
+
+try:
+    from django.utils.encoding import force_text
+except ImportError:
+    from django.utils.encoding import force_unicode as force_text
+
+try:
+    from django.utils.encoding import smart_bytes
+except ImportError:
+    from django.utils.encoding import smart_str as smart_bytes
+
+try:
+    from django.utils.timezone import now
+except ImportError:
+    from datetime import datetime
+    now = datetime.now
+
 
 DEFAULT_BATCH_SIZE = None
 DEFAULT_AGE = None
-DEFAULT_MAX_RETRIES = 5
+APP = 'app'
+MODEL = 'model'
 
-LOG = multiprocessing.log_to_stderr(level=logging.WARNING)
 
-
-def update_worker(args):
-    if len(args) != 10:
-        LOG.error('update_worker received incorrect arguments: %r', args)
-        raise ValueError('update_worker received incorrect arguments')
-
-    model, start, end, total, using, start_date, end_date, verbosity, commit, max_retries = args
-
-    # FIXME: confirm that this is still relevant with modern versions of Django:
+def worker(bits):
     # We need to reset the connections, otherwise the different processes
     # will try to share the connection, which causes things to blow up.
     from django.db import connections
@@ -39,141 +45,111 @@ def update_worker(args):
     for alias, info in connections.databases.items():
         # We need to also tread lightly with SQLite, because blindly wiping
         # out connections (via ``... = {}``) destroys in-memory DBs.
-        if 'sqlite3' not in info['ENGINE']:
+        if not 'sqlite3' in info['ENGINE']:
             try:
-                close_old_connections()
-                if isinstance(connections.thread_local.connections, dict):
-                    del connections.thread_local.connections[alias]
+                db.close_connection()
+                if isinstance(connections._connections, dict):
+                    del(connections._connections[alias])
                 else:
-                    delattr(connections.thread_local.connections, alias)
+                    delattr(connections._connections, alias)
             except KeyError:
                 pass
 
-    # Request that the connection clear out any transient sessions, file handles, etc.
-    haystack_connections[using].reset_sessions()
+    if bits[0] == 'do_update':
+        func, model, start, end, total, using, start_date, end_date, verbosity = bits
+    elif bits[0] == 'do_remove':
+        func, model, pks_seen, start, upper_bound, using, verbosity = bits
+    else:
+        return
 
     unified_index = haystack_connections[using].get_unified_index()
     index = unified_index.get_index(model)
     backend = haystack_connections[using].get_backend()
 
-    qs = index.build_queryset(start_date=start_date, end_date=end_date)
-    do_update(backend, index, qs, start, end, total, verbosity, commit, max_retries)
-    return args
+    if func == 'do_update':
+        qs = index.build_queryset(start_date=start_date, end_date=end_date)
+        do_update(backend, index, qs, start, end, total, verbosity=verbosity)
+    elif bits[0] == 'do_remove':
+        do_remove(backend, index, model, pks_seen, start, upper_bound, verbosity=verbosity)
 
 
-def do_update(backend, index, qs, start, end, total, verbosity=1, commit=True,
-              max_retries=DEFAULT_MAX_RETRIES):
-
+def do_update(backend, index, qs, start, end, total, verbosity=1):
     # Get a clone of the QuerySet so that the cache doesn't bloat up
     # in memory. Useful when reindexing large amounts of data.
     small_cache_qs = qs.all()
     current_qs = small_cache_qs[start:end]
 
-    is_parent_process = hasattr(os, 'getppid') and os.getpid() == os.getppid()
-
     if verbosity >= 2:
-        if is_parent_process:
+        if hasattr(os, 'getppid') and os.getpid() == os.getppid():
             print("  indexed %s - %d of %d." % (start + 1, end, total))
         else:
-            print("  indexed %s - %d of %d (worker PID: %s)." % (start + 1, end, total, os.getpid()))
+            print("  indexed %s - %d of %d (by %s)." % (start + 1, end, total, os.getpid()))
 
-    retries = 0
-    while retries < max_retries:
-        try:
-            # FIXME: Get the right backend.
-            backend.update(index, current_qs, commit=commit)
-            if verbosity >= 2 and retries:
-                print('Completed indexing {} - {}, tried {}/{} times'.format(start + 1,
-                                                                             end,
-                                                                             retries + 1,
-                                                                             max_retries))
-            break
-        except Exception as exc:
-            # Catch all exceptions which do not normally trigger a system exit, excluding SystemExit and
-            # KeyboardInterrupt. This avoids needing to import the backend-specific exception subclasses
-            # from pysolr, elasticsearch, whoosh, requests, etc.
-            retries += 1
-
-            error_context = {'start': start + 1,
-                             'end': end,
-                             'retries': retries,
-                             'max_retries': max_retries,
-                             'pid': os.getpid(),
-                             'exc': exc}
-
-            error_msg = 'Failed indexing %(start)s - %(end)s (retry %(retries)s/%(max_retries)s): %(exc)s'
-            if not is_parent_process:
-                error_msg += ' (pid %(pid)s): %(exc)s'
-
-            if retries >= max_retries:
-                LOG.error(error_msg, error_context, exc_info=True)
-                raise
-            elif verbosity >= 2:
-                LOG.warning(error_msg, error_context, exc_info=True)
-
-            # If going to try again, sleep a bit before
-            time.sleep(2 ** retries)
+    # FIXME: Get the right backend.
+    backend.update(index, current_qs)
 
     # Clear out the DB connections queries because it bloats up RAM.
     reset_queries()
 
 
-class Command(BaseCommand):
-    help = "Freshens the index for the given app(s)."
+def do_remove(backend, index, model, pks_seen, start, upper_bound, verbosity=1):
+    # Fetch a list of results.
+    # Can't do pk range, because id's are strings (thanks comments
+    # & UUIDs!).
+    stuff_in_the_index = SearchQuerySet(using=backend.connection_alias).models(model)[start:upper_bound]
 
-    def add_arguments(self, parser):
-        parser.add_argument(
-            'app_label', nargs='*',
-            help='App label of an application to update the search index.'
-        )
-        parser.add_argument(
-            '-a', '--age', type=int, default=DEFAULT_AGE,
+    # Iterate over those results.
+    for result in stuff_in_the_index:
+        # Be careful not to hit the DB.
+        if not smart_bytes(result.pk) in pks_seen:
+            # The id is NOT in the small_cache_qs, issue a delete.
+            if verbosity >= 2:
+                print("  removing %s." % result.pk)
+
+            backend.remove(".".join([result.app_label, result.model_name, str(result.pk)]))
+
+
+class Command(LabelCommand):
+    help = "Freshens the index for the given app(s)."
+    base_options = (
+        make_option('-a', '--age', action='store', dest='age',
+            default=DEFAULT_AGE, type='int',
             help='Number of hours back to consider objects new.'
-        )
-        parser.add_argument(
-            '-s', '--start', dest='start_date',
+        ),
+        make_option('-s', '--start', action='store', dest='start_date',
+            default=None, type='string',
             help='The start date for indexing within. Can be any dateutil-parsable string, recommended to be YYYY-MM-DDTHH:MM:SS.'
-        )
-        parser.add_argument(
-            '-e', '--end', dest='end_date',
+        ),
+        make_option('-e', '--end', action='store', dest='end_date',
+            default=None, type='string',
             help='The end date for indexing within. Can be any dateutil-parsable string, recommended to be YYYY-MM-DDTHH:MM:SS.'
-        )
-        parser.add_argument(
-            '-b', '--batch-size', dest='batchsize', type=int,
+        ),
+        make_option('-b', '--batch-size', action='store', dest='batchsize',
+            default=None, type='int',
             help='Number of items to index at once.'
-        )
-        parser.add_argument(
-            '-r', '--remove', action='store_true', default=False,
-            help='Remove objects from the index that are no longer present in the database.'
-        )
-        parser.add_argument(
-            '-u', '--using', action='append', default=[],
+        ),
+        make_option('-r', '--remove', action='store_true', dest='remove',
+            default=False, help='Remove objects from the index that are no longer present in the database.'
+        ),
+        make_option("-u", "--using", action="append", dest="using",
+            default=[],
             help='Update only the named backend (can be used multiple times). '
                  'By default all backends will be updated.'
-        )
-        parser.add_argument(
-            '-k', '--workers', type=int, default=0,
-            help='Allows for the use multiple workers to parallelize indexing.'
-        )
-        parser.add_argument(
-            '--nocommit', action='store_false', dest='commit',
-            default=True, help='Will pass commit=False to the backend.'
-        )
-        parser.add_argument(
-            '-t', '--max-retries', action='store', dest='max_retries',
-            type=int, default=DEFAULT_MAX_RETRIES,
-            help='Maximum number of attempts to write to the backend when an error occurs.'
-        )
+        ),
+        make_option('-k', '--workers', action='store', dest='workers',
+            default=0, type='int',
+            help='Allows for the use multiple workers to parallelize indexing. Requires multiprocessing.'
+        ),
+    )
+    option_list = LabelCommand.option_list + base_options
 
-    def handle(self, **options):
+    def handle(self, *items, **options):
         self.verbosity = int(options.get('verbosity', 1))
         self.batchsize = options.get('batchsize', DEFAULT_BATCH_SIZE)
         self.start_date = None
         self.end_date = None
         self.remove = options.get('remove', False)
-        self.workers = options.get('workers', 0)
-        self.commit = options.get('commit', True)
-        self.max_retries = options.get('max_retries', DEFAULT_MAX_RETRIES)
+        self.workers = int(options.get('workers', 0))
 
         self.backends = options.get('using')
         if not self.backends:
@@ -182,11 +158,6 @@ class Command(BaseCommand):
         age = options.get('age', DEFAULT_AGE)
         start_date = options.get('start_date')
         end_date = options.get('end_date')
-
-        if self.verbosity > 2:
-            LOG.setLevel(logging.DEBUG)
-        elif self.verbosity > 1:
-            LOG.setLevel(logging.INFO)
 
         if age is not None:
             self.start_date = now() - timedelta(hours=int(age))
@@ -207,32 +178,73 @@ class Command(BaseCommand):
             except ValueError:
                 pass
 
-        labels = options.get('app_label') or haystack_load_apps()
-        for label in labels:
-            for using in self.backends:
+        if not items:
+            from django.db.models import get_app
+            # Do all, in an INSTALLED_APPS sorted order.
+            items = []
+
+            for app in settings.INSTALLED_APPS:
                 try:
-                    self.update_backend(label, using)
+                    app_label = app.split('.')[-1]
+                    loaded_app = get_app(app_label)
+                    items.append(app_label)
                 except:
-                    LOG.exception("Error updating %s using %s ", label, using)
-                    raise
+                    # No models, no problem.
+                    pass
+
+        return super(Command, self).handle(*items, **options)
+
+    def is_app_or_model(self, label):
+        label_bits = label.split('.')
+
+        if len(label_bits) == 1:
+            return APP
+        elif len(label_bits) == 2:
+            return MODEL
+        else:
+            raise ImproperlyConfigured("'%s' isn't recognized as an app (<app_label>) or model (<app_label>.<model_name>)." % label)
+
+    def get_models(self, label):
+        from django.db.models import get_app, get_models, get_model
+        app_or_model = self.is_app_or_model(label)
+
+        if app_or_model == APP:
+            app_mod = get_app(label)
+            return get_models(app_mod)
+        else:
+            app_label, model_name = label.split('.')
+            return [get_model(app_label, model_name)]
+
+    def handle_label(self, label, **options):
+        for using in self.backends:
+            try:
+                self.update_backend(label, using)
+            except:
+                logging.exception("Error updating %s using %s ", label, using)
+                raise
 
     def update_backend(self, label, using):
+        from haystack.exceptions import NotHandled
+
         backend = haystack_connections[using].get_backend()
         unified_index = haystack_connections[using].get_unified_index()
 
-        for model in haystack_get_models(label):
+        if self.workers > 0:
+            import multiprocessing
+
+        for model in self.get_models(label):
             try:
                 index = unified_index.get_index(model)
             except NotHandled:
                 if self.verbosity >= 2:
-                    self.stdout.write("Skipping '%s' - no index." % model)
+                    print("Skipping '%s' - no index." % model)
                 continue
 
             if self.workers > 0:
                 # workers resetting connections leads to references to models / connections getting
                 # stale and having their connection disconnected from under them. Resetting before
                 # the loop continues and it accesses the ORM makes it better.
-                close_old_connections()
+                db.close_connection()
 
             qs = index.build_queryset(using=using, start_date=self.start_date,
                                       end_date=self.end_date)
@@ -240,9 +252,7 @@ class Command(BaseCommand):
             total = qs.count()
 
             if self.verbosity >= 1:
-                self.stdout.write(u"Indexing %d %s" % (
-                    total, force_text(model._meta.verbose_name_plural))
-                )
+                print(u"Indexing %d %s" % (total, force_text(model._meta.verbose_name_plural)))
 
             batch_size = self.batchsize or backend.batch_size
 
@@ -253,72 +263,38 @@ class Command(BaseCommand):
                 end = min(start + batch_size, total)
 
                 if self.workers == 0:
-                    do_update(backend, index, qs, start, end, total, verbosity=self.verbosity,
-                              commit=self.commit, max_retries=self.max_retries)
+                    do_update(backend, index, qs, start, end, total, self.verbosity)
                 else:
-                    ghetto_queue.append((model, start, end, total, using, self.start_date, self.end_date,
-                                         self.verbosity, self.commit, self.max_retries))
+                    ghetto_queue.append(('do_update', model, start, end, total, using, self.start_date, self.end_date, self.verbosity))
 
             if self.workers > 0:
                 pool = multiprocessing.Pool(self.workers)
-
-                successful_tasks = pool.map(update_worker, ghetto_queue)
-
-                if len(ghetto_queue) != len(successful_tasks):
-                    self.stderr.write('Queued %d tasks but only %d completed' % (len(ghetto_queue),
-                                                                                 len(successful_tasks)))
-                    for i in ghetto_queue:
-                        if i not in successful_tasks:
-                            self.stderr.write('Incomplete task: %s' % repr(i))
-
-                pool.close()
-                pool.join()
+                pool.map(worker, ghetto_queue)
+                pool.terminate()
 
             if self.remove:
                 if self.start_date or self.end_date or total <= 0:
                     # They're using a reduced set, which may not incorporate
                     # all pks. Rebuild the list with everything.
                     qs = index.index_queryset().values_list('pk', flat=True)
-                    database_pks = set(smart_bytes(pk) for pk in qs)
+                    pks_seen = set(smart_bytes(pk) for pk in qs)
 
-                    total = len(database_pks)
+                    total = len(pks_seen)
                 else:
-                    database_pks = set(smart_bytes(pk) for pk in qs.values_list('pk', flat=True))
+                    pks_seen = set(smart_bytes(pk) for pk in qs.values_list('pk', flat=True))
 
-                # Since records may still be in the search index but not the local database
-                # we'll use that to create batches for processing.
-                # See https://github.com/django-haystack/django-haystack/issues/1186
-                index_total = SearchQuerySet(using=backend.connection_alias).models(model).count()
+                if self.workers > 0:
+                    ghetto_queue = []
 
-                # Retrieve PKs from the index. Note that this cannot be a numeric range query because although
-                # pks are normally numeric they can be non-numeric UUIDs or other custom values. To reduce
-                # load on the search engine, we only retrieve the pk field, which will be checked against the
-                # full list obtained from the database, and the id field, which will be used to delete the
-                # record should it be found to be stale.
-                index_pks = SearchQuerySet(using=backend.connection_alias).models(model)
-                index_pks = index_pks.values_list('pk', 'id')
-
-                # We'll collect all of the record IDs which are no longer present in the database and delete
-                # them after walking the entire index. This uses more memory than the incremental approach but
-                # avoids needing the pagination logic below to account for both commit modes:
-                stale_records = set()
-
-                for start in range(0, index_total, batch_size):
+                for start in range(0, total, batch_size):
                     upper_bound = start + batch_size
 
-                    # If the database pk is no longer present, queue the index key for removal:
-                    for pk, rec_id in index_pks[start:upper_bound]:
-                        if smart_bytes(pk) not in database_pks:
-                            stale_records.add(rec_id)
+                    if self.workers == 0:
+                        do_remove(backend, index, model, pks_seen, start, upper_bound)
+                    else:
+                        ghetto_queue.append(('do_remove', model, pks_seen, start, upper_bound, using, self.verbosity))
 
-                if stale_records:
-                    if self.verbosity >= 1:
-                        self.stdout.write("  removing %d stale records." % len(stale_records))
-
-                    for rec_id in stale_records:
-                        # Since the PK was not in the database list, we'll delete the record from the search
-                        # index:
-                        if self.verbosity >= 2:
-                            self.stdout.write("  removing %s." % rec_id)
-
-                        backend.remove(rec_id, commit=self.commit)
+                if self.workers > 0:
+                    pool = multiprocessing.Pool(self.workers)
+                    pool.map(worker, ghetto_queue)
+                    pool.terminate()

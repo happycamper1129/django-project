@@ -1,8 +1,4 @@
-# encoding: utf-8
-
 from __future__ import unicode_literals
-
-import importlib
 import re
 
 from django.conf import settings
@@ -10,6 +6,11 @@ from django.utils import six
 
 from haystack.constants import ID, DJANGO_CT, DJANGO_ID
 from haystack.utils.highlighting import Highlighter
+
+try:
+    from django.utils import importlib
+except ImportError:
+    import importlib
 
 IDENTIFIER_REGEX = re.compile('^[\w\d_]+\.[\w\d_]+\.\d+$')
 
@@ -27,8 +28,11 @@ def default_get_identifier(obj_or_string):
 
         return obj_or_string
 
-    return u"%s.%s" % (get_model_ct(obj_or_string),
-                       obj_or_string._get_pk_val())
+    return u"%s.%s.%s" % (
+        obj_or_string._meta.app_label,
+        obj_or_string._meta.module_name,
+        obj_or_string._get_pk_val()
+    )
 
 
 def _lookup_identifier_method():
@@ -63,11 +67,8 @@ def _lookup_identifier_method():
 get_identifier = _lookup_identifier_method()
 
 
-def get_model_ct_tuple(model):
-    return (model._meta.app_label, model._meta.model_name)
-
 def get_model_ct(model):
-    return "%s.%s" % get_model_ct_tuple(model)
+    return "%s.%s" % (model._meta.app_label, model._meta.module_name)
 
 
 def get_facet_field_name(fieldname):

@@ -1,19 +1,21 @@
-# encoding: utf-8
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
+from __future__ import unicode_literals
+import logging
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-
 from haystack.constants import DEFAULT_ALIAS
 from haystack import signals
 from haystack.utils import loading
 
 
 __author__ = 'Daniel Lindsley'
-__version__ = (2, 5, 0)
+__version__ = (2, 1, 1, 'dev')
 
-default_app_config = 'haystack.apps.HaystackConfig'
+
+# Setup default logging.
+log = logging.getLogger('haystack')
+stream = logging.StreamHandler()
+stream.setLevel(logging.INFO)
+log.addHandler(stream)
 
 
 # Help people clean up from 1.X.
@@ -36,13 +38,19 @@ if DEFAULT_ALIAS not in settings.HAYSTACK_CONNECTIONS:
 # Load the connections.
 connections = loading.ConnectionHandler(settings.HAYSTACK_CONNECTIONS)
 
-# Just check HAYSTACK_ROUTERS setting validity, routers will be loaded lazily
+# Load the router(s).
+connection_router = loading.ConnectionRouter()
+
 if hasattr(settings, 'HAYSTACK_ROUTERS'):
     if not isinstance(settings.HAYSTACK_ROUTERS, (list, tuple)):
         raise ImproperlyConfigured("The HAYSTACK_ROUTERS setting must be either a list or tuple.")
 
-# Load the router(s).
-connection_router = loading.ConnectionRouter()
+    connection_router = loading.ConnectionRouter(settings.HAYSTACK_ROUTERS)
+
+# Setup the signal processor.
+signal_processor_path = getattr(settings, 'HAYSTACK_SIGNAL_PROCESSOR', 'haystack.signals.BaseSignalProcessor')
+signal_processor_class = loading.import_class(signal_processor_path)
+signal_processor = signal_processor_class(connections, connection_router)
 
 
 # Per-request, reset the ghetto query log.

@@ -1,7 +1,4 @@
-# encoding: utf-8
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
+from __future__ import unicode_literals
 from django.conf import settings
 
 DEFAULT_ALIAS = 'default'
@@ -14,12 +11,8 @@ DJANGO_ID = getattr(settings, 'HAYSTACK_DJANGO_ID_FIELD', 'django_id')
 # Default operator. Valid options are AND/OR.
 DEFAULT_OPERATOR = getattr(settings, 'HAYSTACK_DEFAULT_OPERATOR', 'AND')
 
-# Default values on elasticsearch
-FUZZY_MIN_SIM = getattr(settings, 'HAYSTACK_FUZZY_MIN_SIM', 0.5)
-FUZZY_MAX_EXPANSIONS = getattr(settings, 'HAYSTACK_FUZZY_MAX_EXPANSIONS', 50)
-
 # Valid expression extensions.
-VALID_FILTERS = set(['contains', 'exact', 'gt', 'gte', 'lt', 'lte', 'in', 'startswith', 'range', 'fuzzy'])
+VALID_FILTERS = set(['contains', 'exact', 'gt', 'gte', 'lt', 'lte', 'in', 'startswith', 'range'])
 FILTER_SEPARATOR = '__'
 
 # The maximum number of items to display in a SearchQuerySet.__repr__

@@ -8,17 +8,19 @@ from django.db.models import Q
 from django.db.models.base import ModelBase
 from django.utils import six
 from django.utils import tree
-from django.utils.encoding import force_text
-
 from haystack.constants import VALID_FILTERS, FILTER_SEPARATOR, DEFAULT_ALIAS
 from haystack.exceptions import MoreLikeThisError, FacetingError
 from haystack.models import SearchResult
 from haystack.utils.loading import UnifiedIndex
-from haystack.utils import get_model_ct
+
+try:
+    from django.utils.encoding import force_text
+except ImportError:
+    from django.utils.encoding import force_unicode as force_text
+
 
 VALID_GAPS = ['year', 'month', 'day', 'hour', 'minute', 'second']
 
-SPELLING_SUGGESTION_HAS_NOT_RUN = object()
 
 def log_query(func):
     """
@@ -98,7 +100,7 @@ class BaseSearchBackend(object):
         """
         raise NotImplementedError
 
-    def clear(self, models=None, commit=True):
+    def clear(self, models=[], commit=True):
         """
         Clears the backend of all documents/objects for a collection of models.
 
@@ -130,7 +132,7 @@ class BaseSearchBackend(object):
                             narrow_queries=None, spelling_query=None,
                             within=None, dwithin=None, distance_point=None,
                             models=None, limit_to_registered_models=None,
-                            result_class=None, **extra_kwargs):
+                            result_class=None):
         # A convenience method most backends should include in order to make
         # extension easier.
         raise NotImplementedError
@@ -190,7 +192,7 @@ class BaseSearchBackend(object):
         models = []
 
         for model in connections[self.connection_alias].get_unified_index().get_indexed_models():
-            models.append(get_model_ct(model))
+            models.append(u"%s.%s" % (model._meta.app_label, model._meta.module_name))
 
         return models
 
@@ -470,8 +472,7 @@ class BaseSearchQuery(object):
         self._hit_count = None
         self._facet_counts = None
         self._stats = None
-        self._spelling_suggestion = SPELLING_SUGGESTION_HAS_NOT_RUN
-        self.spelling_query = None
+        self._spelling_suggestion = None
         self.result_class = SearchResult
         self.stats = {}
         from haystack import connections
@@ -526,8 +527,6 @@ class BaseSearchQuery(object):
 
         if spelling_query:
             kwargs['spelling_query'] = spelling_query
-        elif self.spelling_query:
-            kwargs['spelling_query'] = self.spelling_query
 
         if self.boost:
             kwargs['boost'] = self.boost
@@ -669,9 +668,6 @@ class BaseSearchQuery(object):
             self.run()
         return self._stats
 
-    def set_spelling_query(self, spelling_query):
-        self.spelling_query = spelling_query
-
     def get_spelling_suggestion(self, preferred_query=None):
         """
         Returns the spelling suggestion received from the backend.
@@ -679,7 +675,7 @@ class BaseSearchQuery(object):
         If the query has not been run, this will execute the query and store
         the results.
         """
-        if self._spelling_suggestion is SPELLING_SUGGESTION_HAS_NOT_RUN:
+        if self._spelling_suggestion is None:
             self.run(spelling_query=preferred_query)
 
         return self._spelling_suggestion
@@ -801,12 +797,23 @@ class BaseSearchQuery(object):
         """Orders the search result by a field."""
         self.order_by.append(field)
 
+    def add_order_by_distance(self, **kwargs):
+        """Orders the search result by distance from point."""
+        raise NotImplementedError("Subclasses must provide a way to add order by distance in the 'add_order_by_distance' method.")
+
     def clear_order_by(self):
         """
         Clears out all ordering that has been already added, reverting the
         query to relevancy.
         """
         self.order_by = []
+
+    def clear_order_by_distance(self):
+        """
+        Clears out all distance ordering that has been already added, reverting the
+        query to relevancy.
+        """
+        self.order_by_distance = []
 
     def add_model(self, model):
         """
@@ -861,9 +868,9 @@ class BaseSearchQuery(object):
         """Adds stats and stats_facets queries for the Solr backend."""
         self.stats[stats_field] = stats_facets
 
-    def add_highlight(self, **kwargs):
+    def add_highlight(self):
         """Adds highlighting to the search results."""
-        self.highlight = kwargs or True
+        self.highlight = True
 
     def add_within(self, field, point_1, point_2):
         """Adds bounding box parameters to search query."""
@@ -976,7 +983,7 @@ class BaseSearchQuery(object):
         self._results = None
         self._hit_count = None
         self._facet_counts = None
-        self._spelling_suggestion = SPELLING_SUGGESTION_HAS_NOT_RUN
+        self._spelling_suggestion = None
 
     def _clone(self, klass=None, using=None):
         if using is None:
@@ -1007,7 +1014,6 @@ class BaseSearchQuery(object):
         clone.distance_point = self.distance_point.copy()
         clone._raw_query = self._raw_query
         clone._raw_query_params = self._raw_query_params
-        clone.spelling_query = self.spelling_query
 
         return clone
 
@@ -1032,15 +1038,11 @@ class BaseEngine(object):
             self._backend = self.backend(self.using, **self.options)
         return self._backend
 
-    def reset_sessions(self):
-        """Reset any transient connections, file handles, etc."""
-        self._backend = None
-
     def get_query(self):
         return self.query(using=self.using)
 
     def reset_queries(self):
-        del self.queries[:]
+        self.queries = []
 
     def get_unified_index(self):
         if self._index is None:

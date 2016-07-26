@@ -13,15 +13,11 @@ Elasticsearch_, Whoosh_, Xapian_, etc.) without having to modify your code.
 
 .. note::
 
-    This documentation represents the current version of Haystack. For old versions of the documentation:
+    This documentation represents the development version of Haystack (2.0.x).
+    For old versions of the documentation: `1.2`_, `1.1`_.
 
-    * v2.4.X: https://django-haystack.readthedocs.io/en/v2.4.1/
-    * v2.3.X: https://django-haystack.readthedocs.io/en/v2.3.0/
-    * v2.2.X: https://django-haystack.readthedocs.io/en/v2.2.0/
-    * v2.1.X: https://django-haystack.readthedocs.io/en/v2.1.0/
-    * v2.0.X: https://django-haystack.readthedocs.io/en/v2.0.0/
-    * v1.2.X: https://django-haystack.readthedocs.io/en/v1.2.7/
-    * v1.1.X: https://django-haystack.readthedocs.io/en/v1.1/
+.. _`1.2`: http://django-haystack.readthedocs.org/en/v1.2.6/index.html
+.. _`1.1`: http://django-haystack.readthedocs.org/en/v1.1/index.html
 
 Getting Started
 ---------------
@@ -47,10 +43,9 @@ you up and running:
    installing_search_engines
    debugging
 
-   changelog
-   contributing
-   python3
    migration_from_1_to_2
+   python3
+   contributing
 
 
 Advanced Uses
@@ -71,7 +66,6 @@ you may want to include in your application.
    multiple_index
    rich_content_extraction
    spatial
-   admin
 
 
 Reference
@@ -116,8 +110,8 @@ Requirements
 
 Haystack has a relatively easily-met set of requirements.
 
-* Python 2.7+ or Python 3.3+
-* A supported version of Django: https://www.djangoproject.com/download/#supported-versions
+* Python 2.6+ or Python 3.3+
+* Django 1.5+
 
 Additionally, each backend has its own requirements. You should refer to
 :doc:`installing_search_engines` for more details.
