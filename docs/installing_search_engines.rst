@@ -14,16 +14,16 @@ than the JRE and Jetty. It's very performant and has an advanced featureset.
 Haystack suggests using Solr 3.5+, though it's possible to get it working on
 Solr 1.4 with a little effort. Installation is relatively simple::
 
-    curl -O https://archive.apache.org/dist/lucene/solr/3.5.0/apache-solr-3.5.0.tgz
-    tar xvzf apache-solr-3.5.0.tgz
-    cd apache-solr-3.5.0
+    curl -LO https://archive.apache.org/dist/lucene/solr/4.10.2/solr-4.10.2.tgz
+    tar xvzf solr-4.10.2.tgz
+    cd solr-4.10.2
     cd example
     java -jar start.jar
 
 You'll need to revise your schema. You can generate this from your application
 (once Haystack is installed and setup) by running
 ``./manage.py build_solr_schema``. Take the output from that command and place
-it in ``apache-solr-3.5.0/example/solr/conf/schema.xml``. Then restart Solr.
+it in ``solr-4.10.2/example/solr/collection1/conf/schema.xml``. Then restart Solr.
 
 .. note::
     ``build_solr_schema`` uses a template to generate ``schema.xml``. Haystack
@@ -42,11 +42,8 @@ somewhere on your ``PYTHONPATH``.
 
 .. note::
 
-    ``pysolr`` has its own dependencies that aren't covered by Haystack. For
-    best results, you should have an ElementTree variant install (preferably the
-    ``lxml`` variant), ``httplib2`` for timeouts (though it will fall back to
-    ``httplib``) and either the ``json`` module that comes with Python 2.5+ or
-    ``simplejson``.
+    ``pysolr`` has its own dependencies that aren't covered by Haystack. See
+    https://pypi.python.org/pypi/pysolr for the latest documentation.
 
 More Like This
 --------------
@@ -117,7 +114,10 @@ Official Download Location: http://www.elasticsearch.org/download/
 
 Elasticsearch is Java but comes in a pre-packaged form that requires very
 little other than the JRE. It's also very performant, scales easily and has
-an advanced featureset. Haystack requires at least version 0.90.0+.
+an advanced featureset. Haystack currently only supports ElasticSearch 1.x.
+ElasticSearch 2.x is not supported yet, if you would like to help, please see
+`#1247 <https://github.com/django-haystack/django-haystack/issues/1247>`_.
+
 Installation is best done using a package manager::
 
     # On Mac OS X...
@@ -152,18 +152,11 @@ locally. Modifications should be done in a YAML file, the stock one being
       logs: /usr/local/var/log
       data: /usr/local/var/data
 
-You'll also need an Elasticsearch binding: elasticsearch-py_ (**NOT**
+You'll also need an Elasticsearch binding: elasticsearch_ (**NOT**
 ``pyes``). Place ``elasticsearch`` somewhere on your ``PYTHONPATH``
 (usually ``python setup.py install`` or ``pip install elasticsearch``).
 
-.. _elasticsearch-py: http://pypi.python.org/pypi/elasticsearch/
-
-.. note::
- 
-  Elasticsearch 1.0 is slightly backwards incompatible so you need to make sure
-  you have the proper version of `elasticsearch-py` installed - releases with
-  major version 1 (1.X.Y) are to be used with Elasticsearch 1.0 and later, 0.4
-  releases are meant to work with Elasticsearch 0.90.X.
+.. _elasticsearch: http://pypi.python.org/pypi/elasticsearch/
 
 .. note::
 
@@ -196,19 +189,22 @@ Official Download Location: http://xapian.org/download
 Xapian is written in C++ so it requires compilation (unless your OS has a
 package for it). Installation looks like::
 
-    curl -O http://oligarchy.co.uk/xapian/1.0.11/xapian-core-1.0.11.tar.gz
-    curl -O http://oligarchy.co.uk/xapian/1.0.11/xapian-bindings-1.0.11.tar.gz
+    curl -O http://oligarchy.co.uk/xapian/1.2.18/xapian-core-1.2.18.tar.xz
+    curl -O http://oligarchy.co.uk/xapian/1.2.18/xapian-bindings-1.2.18.tar.xz
 
-    tar xvzf xapian-core-1.0.11.tar.gz
-    tar xvzf xapian-bindings-1.0.11.tar.gz
+    unxz xapian-core-1.2.18.tar.xz
+    unxz xapian-bindings-1.2.18.tar.xz
 
-    cd xapian-core-1.0.11
+    tar xvf xapian-core-1.2.18.tar
+    tar xvf xapian-bindings-1.2.18.tar
+
+    cd xapian-core-1.2.18
     ./configure
     make
     sudo make install
 
     cd ..
-    cd xapian-bindings-1.0.11
+    cd xapian-bindings-1.2.18
     ./configure
     make
     sudo make install

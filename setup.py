@@ -1,5 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
+# encoding: utf-8
+
+# n.b. we can't have unicode_literals here due to http://bugs.python.org/setuptools/issue152
+from __future__ import absolute_import, division, print_function
+
 try:
     from setuptools import setup
 except ImportError:
@@ -7,10 +11,26 @@ except ImportError:
     use_setuptools()
     from setuptools import setup
 
+install_requires = [
+    'Django>=1.8',
+    'Django<1.10',
+]
+
+tests_require = [
+    'elasticsearch>=1.0.0,<2.0.0',
+    'pysolr>=3.3.2',
+    'whoosh>=2.5.4,<3.0',
+    'python-dateutil',
+    'geopy==0.95.1',
+
+    'nose',
+    'mock',
+    'coverage',
+]
 
 setup(
     name='django-haystack',
-    version='2.1.1-dev',
+    version='2.5.0',
     description='Pluggable search for Django.',
     author='Daniel Lindsley',
     author_email='daniel@toastdriven.com',
@@ -43,4 +63,7 @@ setup(
         'Topic :: Utilities',
     ],
     zip_safe=False,
+    install_requires=install_requires,
+    tests_require=tests_require,
+    test_suite="test_haystack.run_tests.run_all",
 )
