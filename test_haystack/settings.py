@@ -93,13 +93,3 @@ HAYSTACK_CONNECTIONS = {
         'INCLUDE_SPELLING': True,
     },
 }
-
-try:
-    import elasticsearch
-
-    if (2, ) <= elasticsearch.__version__ <= (3, ):
-        HAYSTACK_CONNECTIONS['elasticsearch'].update({
-            'ENGINE': 'haystack.backends.elasticsearch2_backend.Elasticsearch2SearchEngine'
-        })
-except ImportError:
-    del HAYSTACK_CONNECTIONS['elasticsearch']
