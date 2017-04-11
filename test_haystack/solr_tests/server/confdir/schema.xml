@@ -45,7 +45,7 @@
     that avoids logging every request
 -->
 
-<schema name="example-data-driven-schema" version="1.6">
+<schema name="haystack-schema" version="1.6">
 
     <!--
     ######################## django-haystack specifics begin ########################
@@ -77,24 +77,42 @@
         </analyzer>
     </fieldType>
 
-    <field name="{{ ID }}" type="string" indexed="true" stored="true" multiValued="false" required="true"/>
-    <field name="{{ DJANGO_CT }}" type="string" indexed="true" stored="true" multiValued="false"/>
-    <field name="{{ DJANGO_ID }}" type="string" indexed="true" stored="true" multiValued="false"/>
-    {% for field in fields %}
-    <field name="{{ field.field_name }}" type="{{ field.type }}" indexed="{{ field.indexed }}" stored="{{ field.stored }}" multiValued="{{ field.multi_valued }}" />
-    {% endfor %}
+    <field name="id" type="string" indexed="true" stored="true" multiValued="false" required="true"/>
+    <field name="django_ct" type="string" indexed="true" stored="true" multiValued="false"/>
+    <field name="django_id" type="string" indexed="true" stored="true" multiValued="false"/>
 
-    <uniqueKey>{{ ID }}</uniqueKey>
+    <uniqueKey>id</uniqueKey>
 
     <!--
     Not required if the default search field (<str name="df">text</str>) is defined for
     /select request handler in sorlconfig.xml
     -->
-    <defaultSearchField>{{ content_field_name }}</defaultSearchField>
+    <defaultSearchField>text</defaultSearchField>
 
     <!-- SolrQueryParser configuration: defaultOperator="AND|OR" -->
-    <solrQueryParser defaultOperator="{{ default_operator }}"/>
+    <solrQueryParser defaultOperator="AND"/>
 
+    <field name="author" type="string" indexed="true" stored="true" multiValued="false" omitNorms="false"/>
+    <field name="average_rating" type="floats" indexed="true" stored="true" multiValued="false"/>
+    <field name="cat" type="text_ws" indexed="true" stored="true" multiValued="true" omitNorms="true"/>
+    <field name="comment" type="text_en" indexed="true" stored="true" multiValued="false"/>
+    <field name="created" type="date" indexed="true" stored="true" multiValued="false"/>
+    <field name="editor" type="string" indexed="true" stored="true" multiValued="false" omitNorms="false"/>
+    <field name="is_active" type="boolean" indexed="true" stored="true" multiValued="false"/>
+    <field name="location" type="location" indexed="true" stored="true" multiValued="false"/>
+    <field name="month" type="string" indexed="false" stored="true" multiValued="false"/>
+    <field name="name" type="string" indexed="true" stored="true" multiValued="false"/>
+    <field name="name_auto" type="edge_ngram" indexed="true" stored="true" multiValued="false"/>
+    <field name="name_exact" type="string" indexed="true" stored="true" multiValued="false"/>
+    <field name="post_count" type="ints" indexed="true" stored="true" multiValued="false"/>
+    <field name="price" type="string" indexed="true" stored="true" multiValued="false"/>
+    <field name="pub_date" type="date" indexed="true" stored="true" multiValued="false"/>
+    <field name="sites" type="ints" indexed="true" stored="true" multiValued="true"/>
+    <field name="tags" type="text_en" indexed="true" stored="true" multiValued="true"/>
+    <field name="text" type="text_en" indexed="true" stored="true" multiValued="false"/>
+    <field name="text_auto" type="edge_ngram" indexed="true" stored="true" multiValued="false"/>
+    <field name="type" type="string" indexed="true" stored="true" multiValued="false"/>
+    <field name="username" type="string" indexed="true" stored="true" multiValued="false"/>
     <!--
     ######################## django-haystack specifics end ########################
     -->
