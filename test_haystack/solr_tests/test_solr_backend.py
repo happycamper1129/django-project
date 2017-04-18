@@ -432,8 +432,7 @@ class SolrSearchBackendTestCase(TestCase):
         self.assertEqual(results['hits'], 1)
 
         # Ensure that swapping the ``result_class`` works.
-        results = self.sb.search(u'index', result_class=MockSearchResult)
-        self.assertTrue(isinstance(self.sb.search(u'index', result_class=MockSearchResult)['results'][0], MockSearchResult))
+        self.assertTrue(isinstance(self.sb.search(u'index document', result_class=MockSearchResult)['results'][0], MockSearchResult))
 
         # Check the use of ``limit_to_registered_models``.
         self.assertEqual(self.sb.search('', limit_to_registered_models=False), {'hits': 0, 'results': []})
@@ -766,16 +765,8 @@ class LiveSolrSearchQueryTestCase(TestCase):
 
     def test_get_spelling(self):
         self.sq.add_filter(SQ(content='Indexy'))
-
-        #Default collate + spelling path
-        results = self.sq.get_spelling_suggestion()
         self.assertEqual(self.sq.get_spelling_suggestion(), u'(index)')
         self.assertEqual(self.sq.get_spelling_suggestion('indexy'), u'(index)')
-
-        #Just spelling path
-        self.sq.run(spelling_query='Indexy',collate=False)
-        self.assertEqual(self.sq._spelling_suggestion,u'index')
-
 
     def test_log_query(self):
         reset_search_queries()
@@ -1222,37 +1213,36 @@ class LiveSolrMoreLikeThisTestCase(TestCase):
         # items which we'll confirm are included in the first 5 results. This is still ugly as we're
         # hard-coding primary keys but it's better than breaking any time a Solr update or data
         # change causes a score to shift slightly
+
         top_results = [int(result.pk) for result in all_mlt[:5]]
-        for i in (14, 6, 10, 4, 5):
+        for i in (14, 6, 4, 22, 10):
             self.assertIn(i, top_results)
 
         filtered_mlt = self.sqs.filter(name='daniel3').more_like_this(MockModel.objects.get(pk=3))
         self.assertLess(filtered_mlt.count(), all_mlt.count())
         top_filtered_results = [int(result.pk) for result in filtered_mlt[:5]]
 
-        for i in (16, 17, 19, 13, 23):
+        for i in (16, 17, 19, 22, 23):
             self.assertIn(i, top_filtered_results)
 
         mlt_filtered = self.sqs.more_like_this(MockModel.objects.get(pk=3)).filter(name='daniel3')
         self.assertLess(mlt_filtered.count(), all_mlt.count())
         top_mlt_filtered_pks = [int(result.pk) for result in mlt_filtered[:5]]
 
-        for i in (17, 16, 19, 23, 13):
+        for i in (17, 16, 19, 23, 22):
             self.assertIn(i, top_mlt_filtered_pks)
 
         filtered_mlt_with_models = self.sqs.models(MockModel).more_like_this(MockModel.objects.get(pk=1))
         self.assertLessEqual(filtered_mlt_with_models.count(), all_mlt.count())
         top_filtered_with_models = [int(result.pk) for result in filtered_mlt_with_models[:5]]
-
-        for i in (14, 6, 4, 5, 10):
+        for i in (14, 6, 4, 22, 10):
             self.assertIn(i, top_filtered_with_models)
 
     def test_more_like_this_defer(self):
         mi = MockModel.objects.defer('foo').get(pk=1)
         deferred = self.sqs.models(MockModel).more_like_this(mi)
         top_results = [int(result.pk) for result in deferred[:5]]
-
-        for i in (14, 6, 4, 5, 10):
+        for i in (14, 6, 4, 22, 10):
             self.assertIn(i, top_results)
 
     def test_more_like_this_custom_result_class(self):
@@ -1289,7 +1279,7 @@ class LiveSolrAutocompleteTestCase(TestCase):
     def test_autocomplete(self):
         autocomplete = self.sqs.autocomplete(text_auto='mod')
         self.assertEqual(autocomplete.count(), 5)
-        self.assertTrue(set([result.pk for result in autocomplete]) == set(['1', '12', '6', '7', '14']))
+        self.assertEqual([result.pk for result in autocomplete], ['1', '12', '6', '7', '14'])
         self.assertTrue('mod' in autocomplete[0].text.lower())
         self.assertTrue('mod' in autocomplete[1].text.lower())
         self.assertTrue('mod' in autocomplete[2].text.lower())
@@ -1300,7 +1290,7 @@ class LiveSolrAutocompleteTestCase(TestCase):
         # Test multiple words.
         autocomplete_2 = self.sqs.autocomplete(text_auto='your mod')
         self.assertEqual(autocomplete_2.count(), 3)
-        self.assertTrue(set([result.pk for result in autocomplete_2]) == set(['1', '14', '6']))
+        self.assertEqual([result.pk for result in autocomplete_2], ['1', '14', '6'])
         self.assertTrue('your' in autocomplete_2[0].text.lower())
         self.assertTrue('mod' in autocomplete_2[0].text.lower())
         self.assertTrue('your' in autocomplete_2[1].text.lower())
@@ -1312,7 +1302,7 @@ class LiveSolrAutocompleteTestCase(TestCase):
         # Test multiple fields.
         autocomplete_3 = self.sqs.autocomplete(text_auto='Django', name_auto='dan')
         self.assertEqual(autocomplete_3.count(), 4)
-        self.assertTrue(set([result.pk for result in autocomplete_3]) == set(['12', '1', '14', '22']))
+        self.assertEqual([result.pk for result in autocomplete_3], ['12', '1', '14', '22'])
         self.assertEqual(len([result.pk for result in autocomplete_3]), 4)
 
 
