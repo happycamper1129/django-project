@@ -42,11 +42,12 @@ class SolrSearchBackend(BaseSearchBackend):
     def __init__(self, connection_alias, **connection_options):
         super(SolrSearchBackend, self).__init__(connection_alias, **connection_options)
 
-        if 'URL' not in connection_options:
+        if not 'URL' in connection_options:
             raise ImproperlyConfigured("You must specify a 'URL' in your settings for connection '%s'." % connection_alias)
 
-        self.conn = Solr(connection_options['URL'], timeout=self.timeout,
-                         **connection_options.get('KWARGS', {}))
+        self.collate = connection_options.get('COLLATE_SPELLING', True)
+
+        self.conn = Solr(connection_options['URL'], timeout=self.timeout, **connection_options.get('KWARGS', {}))
         self.log = logging.getLogger('haystack')
 
     def update(self, index, iterable, commit=True):
@@ -140,10 +141,7 @@ class SolrSearchBackend(BaseSearchBackend):
             self.log.error("Failed to query Solr using '%s': %s", query_string, e, exc_info=True)
             raw_results = EmptyResults()
 
-        return self._process_results(raw_results,
-                                     highlight=kwargs.get('highlight'),
-                                     result_class=kwargs.get('result_class', SearchResult),
-                                     distance_point=kwargs.get('distance_point'))
+        return self._process_results(raw_results, highlight=kwargs.get('highlight'), result_class=kwargs.get('result_class', SearchResult), distance_point=kwargs.get('distance_point'))
 
     def build_search_kwargs(self, query_string, sort_by=None, start_offset=0, end_offset=None,
                             fields='', highlight=False, facets=None,
@@ -151,7 +149,7 @@ class SolrSearchBackend(BaseSearchBackend):
                             narrow_queries=None, spelling_query=None,
                             within=None, dwithin=None, distance_point=None,
                             models=None, limit_to_registered_models=None,
-                            result_class=None, stats=None,
+                            result_class=None, stats=None, collate=None,
                             **extra_kwargs):
         kwargs = {'fl': '* score'}
 
@@ -201,9 +199,11 @@ class SolrSearchBackend(BaseSearchBackend):
                     for key in highlight.keys()
                 })
 
+        if collate is None:
+            collate = self.collate
         if self.include_spelling is True:
             kwargs['spellcheck'] = 'true'
-            kwargs['spellcheck.collate'] = 'true'
+            kwargs['spellcheck.collate'] = str(collate).lower()
             kwargs['spellcheck.count'] = 1
 
             if spelling_query:
@@ -371,8 +371,8 @@ class SolrSearchBackend(BaseSearchBackend):
         if result_class is None:
             result_class = SearchResult
 
-        if hasattr(raw_results, 'stats'):
-            stats = raw_results.stats.get('stats_fields', {})
+        if hasattr(raw_results,'stats'):
+            stats = raw_results.stats.get('stats_fields',{})
 
         if hasattr(raw_results, 'facets'):
             facets = {
@@ -385,17 +385,41 @@ class SolrSearchBackend(BaseSearchBackend):
                 for facet_field in facets[key]:
                     # Convert to a two-tuple, as Solr's json format returns a list of
                     # pairs.
-                    facets[key][facet_field] = list(zip(facets[key][facet_field][::2],
-                                                        facets[key][facet_field][1::2]))
+                    facets[key][facet_field] = list(zip(facets[key][facet_field][::2], facets[key][facet_field][1::2]))
 
         if self.include_spelling and hasattr(raw_results, 'spellcheck'):
-            # Solr 5+ changed the JSON response format so the suggestions will be key-value mapped rather
-            # than simply paired elements in a list, which is a nice improvement but incompatible with
-            # Solr 4: https://issues.apache.org/jira/browse/SOLR-3029
-            if len(raw_results.spellcheck.get('collations', [])):
-                spelling_suggestion = raw_results.spellcheck['collations'][-1]
-            elif len(raw_results.spellcheck.get('suggestions', [])):
-                spelling_suggestion = raw_results.spellcheck['suggestions'][-1]
+            # There are many different formats for Legacy, 6.4, and 6.5
+            # e.g. https://issues.apache.org/jira/browse/SOLR-3029
+            collations = raw_results.spellcheck.get('collations', [])
+            suggestions = raw_results.spellcheck.get('suggestions', [])
+            if len(collations):
+                #Handle sol6.5 collation format
+                if isinstance(collations, dict):
+                    spelling_suggestions= [col['collationQuery'] for col in collations.values()]  #aggregate for future use in multi suggestion response
+                #Legacy Legacy & 6.4 handling
+                else:
+                    if isinstance(collations[1], dict):  #Solr6.4
+                        spelling_suggestions = [item["collationQuery"] for item in collations if isinstance(item,dict)]  #aggregate for future use in multi suggestion response
+                    else:  #Legacy Solr format
+                        spelling_suggestions=collations[-1]
+
+                spelling_suggestion = spelling_suggestions[-1]  #Keep current method of returning single value
+            elif len(suggestions):
+                #Handle sol6.5 suggestion format
+                if isinstance(suggestions, dict):
+                    for word,sug in suggestions.items():
+                        spelling_suggestions = [item["word"] for item in sug['suggestion']]  #aggregate for future use in multi suggestion response
+                #Legacy Legacy & 6.4 handling
+                else:
+                    spelling_suggestions = []
+                    if isinstance(suggestions[1], dict):  #Solr6.4
+                        for item in suggestions:
+                            if isinstance(item, dict):
+                                spelling_suggestions += [subitem["word"] for subitem in item['suggestion']]
+                    else:  #Legacy Solr
+                        spelling_suggestions=suggestions[-1]
+
+                spelling_suggestion = spelling_suggestions[-1]  #Keep current method of returning single value
 
             assert spelling_suggestion is None or isinstance(spelling_suggestion, six.string_types)
 
@@ -722,10 +746,11 @@ class SolrSearchQuery(BaseSearchQuery):
             search_kwargs.update(kwargs)
 
         results = self.backend.search(final_query, **search_kwargs)
+
         self._results = results.get('results', [])
         self._hit_count = results.get('hits', 0)
         self._facet_counts = self.post_process_facets(results)
-        self._stats = results.get('stats', {})
+        self._stats = results.get('stats',{})
         self._spelling_suggestion = results.get('spelling_suggestion', None)
 
     def run_mlt(self, **kwargs):
