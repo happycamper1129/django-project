@@ -2,16 +2,22 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from django.core.exceptions import ImproperlyConfigured
-from django.core.management.base import BaseCommand
-from django.template import Context, loader
+import os
 
-from haystack import connections, connection_router, constants
+import requests
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
+from django.core.management.base import BaseCommand, CommandError
+from django.template import loader
+
+from haystack import connections, constants
 from haystack.backends.solr_backend import SolrSearchBackend
 
 
 class Command(BaseCommand):
-    help = "Generates a Solr schema that reflects the indexes."
+    help = "Generates a Solr schema that reflects the indexes using templates under a django template dir 'search_configuration/*.xml'"
+    schema_template_loc = 'search_configuration/schema.xml'
+    solrcfg_template_loc = 'search_configuration/solrconfig.xml'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -22,37 +28,99 @@ class Command(BaseCommand):
             "-u", "--using", default=constants.DEFAULT_ALIAS,
             help='If provided, chooses a connection to work with.'
         )
+        parser.add_argument(
+            "-c", "--configure_dir",
+            help='If provided, attempts to configure a core located in the given directory by removing the managed-schema.xml(renaming), configuring the core to use a classic (non-dynamic) schema, and generating the schema.xml from the template provided in'
+        )
+        parser.add_argument(
+            "-r", "--reload",
+            help='If provided, attempts to automatically reload the solr core'
+        )
 
     def handle(self, **options):
         """Generates a Solr schema that reflects the indexes."""
         using = options.get('using')
-        schema_xml = self.build_template(using=using)
+        if not isinstance(connections[using].get_backend(), SolrSearchBackend):
+            raise ImproperlyConfigured("'%s' isn't configured as a SolrEngine)." % connections[using].get_backend().connection_alias)
+
+        schema_xml = self.build_template(using=using, template_filename=Command.schema_template_loc)
+        solrcfg_xml = self.build_template(using=using, template_filename=Command.solrcfg_template_loc)
 
         if options.get('filename'):
+            self.stdout.write("Trying to write schema file located at {}".format(options.get('filename')))
             self.write_file(options.get('filename'), schema_xml)
-        else:
+            if options.get('reload'):
+                connections[using].get_backend().reload()
+
+        if options.get('configure_dir'):
+            cdir = options.get('configure_dir')
+            self.stdout.write("Trying to configure core located at {}".format(cdir))
+
+            managed_schema_path = os.path.join(cdir, 'managed-schema')
+
+            if os.path.isfile(managed_schema_path):
+                try:
+                    os.rename(managed_schema_path, '%s.old' % managed_schema_path)
+                except:
+                    raise CommandError('Could not rename old schema file out of the way: {}'.format(managed_schema_path))
+
+            schema_xml_path = os.path.join(cdir, 'schema.xml')
+
+            try:
+                self.write_file(schema_xml_path, schema_xml)
+            except EnvironmentError as exc:
+                raise CommandError('Could not configure {}: {}'.format(schema_xml_path, exc))
+
+            solrconfig_path = os.path.join(cdir, 'solrconfig.xml')
+
+            try:
+                self.write_file(solrconfig_path, solrcfg_xml)
+            except EnvironmentError as exc:
+                raise CommandError('Could not write {}: {}'.format(solrconfig_path, exc))
+
+        if options.get('reload'):
+            core = settings.HAYSTACK_CONNECTIONS['solr']['URL'].rsplit('/', 1)[-1]
+
+            if 'ADMIN_URL' not in settings.HAYSTACK_CONNECTIONS['solr']:
+                raise ImproperlyConfigured("'ADMIN_URL' must be specifid in the HAYSTACK_CONNECTIONS settins for the backend")
+            if 'URL' not in settings.HAYSTACK_CONNECTIONS['solr']:
+                raise ImproperlyConfigured("'URL' to the core must be specifid in the HAYSTACK_CONNECTIONS settins for the backend")
+
+            try:
+                self.stdout.write("Trying to relaod core named {}".format(core))
+                resp = requests.get(settings.HAYSTACK_CONNECTIONS['solr']['ADMIN_URL'],
+                                    params={'action': 'RELOAD', 'core': core})
+
+                if not resp.ok:
+                    raise CommandError('Solr Exception Thrown -- Failed to reload core: {}'.format(resp))
+            except CommandError:
+                raise
+            except Exception as exc:
+                raise CommandError('Failed to reload core {}: {}'.format(core, exc))
+
+        if not options.get('filename') and not options.get('configure_dir') and not options.get('reload'):
             self.print_stdout(schema_xml)
 
     def build_context(self, using):
         backend = connections[using].get_backend()
 
         if not isinstance(backend, SolrSearchBackend):
-            raise ImproperlyConfigured("'%s' isn't configured as a SolrEngine)." % backend.connection_alias)
+            raise ImproperlyConfigured("'%s' isn't configured as a SolrEngine" % backend.connection_alias)
 
         content_field_name, fields = backend.build_schema(
             connections[using].get_unified_index().all_searchfields()
         )
-        return Context({
+        return {
             'content_field_name': content_field_name,
             'fields': fields,
             'default_operator': constants.DEFAULT_OPERATOR,
             'ID': constants.ID,
             'DJANGO_CT': constants.DJANGO_CT,
             'DJANGO_ID': constants.DJANGO_ID,
-        })
+        }
 
-    def build_template(self, using):
-        t = loader.get_template('search_configuration/solr.xml')
+    def build_template(self, using, template_filename=schema_template_loc):
+        t = loader.get_template(template_filename)
         c = self.build_context(using=using)
         return t.render(c)
 
@@ -68,3 +136,4 @@ class Command(BaseCommand):
     def write_file(self, filename, schema_xml):
         with open(filename, 'w') as schema_file:
             schema_file.write(schema_xml)
+            os.fsync(schema_file.fileno())
