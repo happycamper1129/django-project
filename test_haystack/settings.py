@@ -62,8 +62,7 @@ MIDDLEWARE_CLASSES = [
 
 ROOT_URLCONF = 'test_haystack.core.urls'
 
-HAYSTACK_ROUTERS = ['haystack.routers.DefaultRouter',
-    'test_haystack.multipleindex.routers.MultipleIndexRouter']
+HAYSTACK_ROUTERS = ['haystack.routers.DefaultRouter', 'test_haystack.multipleindex.routers.MultipleIndexRouter']
 
 HAYSTACK_CONNECTIONS = {
     'default': {
@@ -90,19 +89,17 @@ HAYSTACK_CONNECTIONS = {
     },
     'solr': {
         'ENGINE': 'haystack.backends.solr_backend.SolrEngine',
-        'URL': os.environ.get('TEST_SOLR_URL', 'http://localhost:9001/solr/collection1'),
-        'ADMIN_URL': os.environ.get('TEST_SOLR_ADMIN_URL', 'http://localhost:9001/solr/admin/cores'),
+        'URL': os.environ.get('TEST_SOLR_URL', 'http://localhost:9001/solr/'),
         'INCLUDE_SPELLING': True,
     },
 }
 
-if 'elasticsearch' in HAYSTACK_CONNECTIONS:
-    try:
-        import elasticsearch
+try:
+    import elasticsearch
 
-        if (2, ) <= elasticsearch.__version__ <= (3, ):
-            HAYSTACK_CONNECTIONS['elasticsearch'].update({
-                'ENGINE': 'haystack.backends.elasticsearch2_backend.Elasticsearch2SearchEngine'
-            })
-    except ImportError:
-        del HAYSTACK_CONNECTIONS['elasticsearch']
+    if (2, ) <= elasticsearch.__version__ <= (3, ):
+        HAYSTACK_CONNECTIONS['elasticsearch'].update({
+            'ENGINE': 'haystack.backends.elasticsearch2_backend.Elasticsearch2SearchEngine'
+        })
+except ImportError:
+    del HAYSTACK_CONNECTIONS['elasticsearch']

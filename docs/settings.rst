@@ -78,9 +78,7 @@ Additionally, each backend may have additional options it requires:
 
 * Solr
 
-  * ``URL`` - The URL to the Solr core. E.G. http://localhost:9001/solr/collection1
-  * ``ADMIN_URL`` - The URL to the administrative functions. E.G.
-  http://localhost:9001/solr/admin/cores
+  * ``URL`` - The URL to the Solr core.
 
 * Whoosh
 
