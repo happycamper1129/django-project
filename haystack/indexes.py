@@ -239,11 +239,6 @@ class SearchIndex(with_metaclass(DeclarativeMetaclass, threading.local)):
         return weights
 
     def _get_backend(self, using):
-        warnings.warn('SearchIndex._get_backend is deprecated; use SearchIndex.get_backend instead',
-                      DeprecationWarning)
-        return self.get_backend(using)
-
-    def get_backend(self, using=None):
         if using is None:
             try:
                 using = connection_router.for_write(index=self)[0]
@@ -261,8 +256,7 @@ class SearchIndex(with_metaclass(DeclarativeMetaclass, threading.local)):
         used. Default relies on the routers to decide which backend should
         be used.
         """
-
-        backend = self.get_backend(using)
+        backend = self._get_backend(using)
 
         if backend is not None:
             backend.update(self, self.index_queryset(using=using))
@@ -278,7 +272,7 @@ class SearchIndex(with_metaclass(DeclarativeMetaclass, threading.local)):
         """
         # Check to make sure we want to index this first.
         if self.should_update(instance, **kwargs):
-            backend = self.get_backend(using)
+            backend = self._get_backend(using)
 
             if backend is not None:
                 backend.update(self, [instance])
@@ -292,7 +286,7 @@ class SearchIndex(with_metaclass(DeclarativeMetaclass, threading.local)):
         used. Default relies on the routers to decide which backend should
         be used.
         """
-        backend = self.get_backend(using)
+        backend = self._get_backend(using)
 
         if backend is not None:
             backend.remove(instance, **kwargs)
@@ -305,7 +299,7 @@ class SearchIndex(with_metaclass(DeclarativeMetaclass, threading.local)):
         used. Default relies on the routers to decide which backend should
         be used.
         """
-        backend = self.get_backend(using)
+        backend = self._get_backend(using)
 
         if backend is not None:
             backend.clear(models=[self.get_model()])
