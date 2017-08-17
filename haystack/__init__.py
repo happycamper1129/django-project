@@ -13,9 +13,9 @@ from haystack.utils import loading
 __author__ = 'Daniel Lindsley'
 
 try:
-    __version__ = get_distribution('django-haystack').version
+    __version__ = get_distribution(__name__).version
 except DistributionNotFound:
-    __version__ = '0.0.dev0'
+    __version__ = (0, 0, 'dev0')
 
 default_app_config = 'haystack.apps.HaystackConfig'
 
