@@ -25,7 +25,7 @@ class MockModel(models.Model):
     def hello(self):
         return 'World!'
 
-class UUIDMockModel(models.Model):
+class MockUUIDModel(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     characteristics = models.TextField()
 

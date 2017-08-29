@@ -172,14 +172,11 @@ class SearchQuerySet(object):
 
         for result in results:
             if self._load_all:
-                
+                # We have to deal with integer keys being cast from strings
                 model_objects = loaded_objects.get(result.model, {})
-                # Try to coerce a primary key object that matches the models pk
-                # We have to deal with semi-arbitrary keys being cast from strings (UUID, int, etc)
                 if result.pk not in model_objects:
                     try:
-                        result_klass = type(next(iter(model_objects)))
-                        result.pk = result_klass(result.pk)
+                        result.pk = int(result.pk)
                     except ValueError:
                         pass
                 try:
