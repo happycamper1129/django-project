@@ -277,7 +277,7 @@ class WhooshSearchBackend(BaseSearchBackend):
     def calculate_page(self, start_offset=0, end_offset=None):
         # Prevent against Whoosh throwing an error. Requires an end_offset
         # greater than 0.
-        if end_offset is not None and end_offset <= 0:
+        if not end_offset is None and end_offset <= 0:
             end_offset = 1
 
         # Determine the page.
@@ -404,7 +404,7 @@ class WhooshSearchBackend(BaseSearchBackend):
                 if narrowed_results:
                     narrowed_results.filter(recent_narrowed_results)
                 else:
-                    narrowed_results = recent_narrowed_results
+                   narrowed_results = recent_narrowed_results
 
         self.index = self.index.refresh()
 
@@ -484,6 +484,10 @@ class WhooshSearchBackend(BaseSearchBackend):
         if not self.setup_complete:
             self.setup()
 
+        # Deferred models will have a different class ("RealClass_Deferred_fieldname")
+        # which won't be in our registry:
+        model_klass = model_instance._meta.concrete_model
+
         field_name = self.content_field_name
         narrow_queries = set()
         narrowed_results = None
@@ -529,14 +533,13 @@ class WhooshSearchBackend(BaseSearchBackend):
                 if narrowed_results:
                     narrowed_results.filter(recent_narrowed_results)
                 else:
-                    narrowed_results = recent_narrowed_results
+                   narrowed_results = recent_narrowed_results
 
         page_num, page_length = self.calculate_page(start_offset, end_offset)
 
         self.index = self.index.refresh()
         raw_results = EmptyResults()
 
-        searcher = None
         if self.index.doc_count():
             query = "%s:%s" % (ID, get_identifier(model_instance))
             searcher = self.index.searcher()
@@ -572,9 +575,7 @@ class WhooshSearchBackend(BaseSearchBackend):
             }
 
         results = self._process_results(raw_page, result_class=result_class)
-
-        if searcher:
-            searcher.close()
+        searcher.close()
 
         if hasattr(narrow_searcher, 'close'):
             narrow_searcher.close()
@@ -897,6 +898,13 @@ class WhooshSearchQuery(BaseSearchQuery):
                 query_frag = "(%s)" % query_frag
 
         return u"%s%s" % (index_fieldname, query_frag)
+
+
+        # if not filter_type in ('in', 'range'):
+        #     # 'in' is a bit of a special case, as we don't want to
+        #     # convert a valid list/tuple to string. Defer handling it
+        #     # until later...
+        #     value = self.backend._from_python(value)
 
 
 class WhooshEngine(BaseEngine):

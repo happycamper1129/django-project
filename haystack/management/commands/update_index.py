@@ -131,7 +131,6 @@ def do_update(backend, index, qs, start, end, total, verbosity=1, commit=True,
     reset_queries()
     return max_pk
 
-
 class Command(BaseCommand):
     help = "Freshens the index for the given app(s)."
 
@@ -146,13 +145,11 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '-s', '--start', dest='start_date',
-            help='The start date for indexing. Can be any dateutil-parsable string;'
-                 ' YYYY-MM-DDTHH:MM:SS is recommended to avoid confusion'
+            help='The start date for indexing within. Can be any dateutil-parsable string, recommended to be YYYY-MM-DDTHH:MM:SS.'
         )
         parser.add_argument(
             '-e', '--end', dest='end_date',
-            help='The end date for indexing. Can be any dateutil-parsable string;'
-                 ' YYYY-MM-DDTHH:MM:SS is recommended to avoid confusion'
+            help='The end date for indexing within. Can be any dateutil-parsable string, recommended to be YYYY-MM-DDTHH:MM:SS.'
         )
         parser.add_argument(
             '-b', '--batch-size', dest='batchsize', type=int,
@@ -271,9 +268,9 @@ class Command(BaseCommand):
 
                 if self.workers == 0:
                     max_pk = do_update(backend, index, qs, start, end, total,
-                                       verbosity=self.verbosity,
-                                       commit=self.commit, max_retries=self.max_retries,
-                                       last_max_pk=max_pk)
+                        verbosity=self.verbosity,
+                        commit=self.commit, max_retries=self.max_retries,
+                        last_max_pk=max_pk)
                 else:
                     ghetto_queue.append((model, start, end, total, using, self.start_date, self.end_date,
                                          self.verbosity, self.commit, self.max_retries))
@@ -299,6 +296,8 @@ class Command(BaseCommand):
                     # all pks. Rebuild the list with everything.
                     qs = index.index_queryset().values_list('pk', flat=True)
                     database_pks = set(smart_bytes(pk) for pk in qs)
+
+                    total = len(database_pks)
                 else:
                     database_pks = set(smart_bytes(pk) for pk in qs.values_list('pk', flat=True))
 
