@@ -147,12 +147,12 @@ class SearchQuerySet(object):
                 current_position += 1
 
             if self._cache_is_full():
-                return
+                raise StopIteration
 
             # We've run out of results and haven't hit our limit.
             # Fill more of the cache.
             if not self._fill_cache(current_position, current_position + ITERATOR_LOAD_PER_QUERY):
-                return
+                raise StopIteration
 
     def post_process_results(self, results):
         to_cache = []
