@@ -2,15 +2,11 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import django
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.test.utils import override_settings
-if django.VERSION < (1, 10):
-    from django.core.urlresolvers import reverse
-else:
-    from django.urls import reverse
+from django.core.urlresolvers import reverse
 
 from haystack import connections, reset_search_queries
 from haystack.utils.loading import UnifiedIndex
