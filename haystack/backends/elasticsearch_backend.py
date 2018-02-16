@@ -296,7 +296,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             for field, direction in sort_by:
                 if field == 'distance' and distance_point:
                     # Do the geo-enabled sort.
-                    lng, lat = distance_point['point'].coords
+                    lng, lat = distance_point['point'].get_coords()
                     sort_kwargs = {
                         "_geo_distance": {
                             distance_point['field']: [lng, lat],
@@ -455,7 +455,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             filters.append(within_filter)
 
         if dwithin is not None:
-            lng, lat = dwithin['point'].coords
+            lng, lat = dwithin['point'].get_coords()
 
             # NB: the 1.0.0 release of elasticsearch introduce an
             #     incompatible change on the distance filter formating
@@ -625,8 +625,8 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             model = haystack_get_model(app_label, model_name)
 
             if model and model in indexed_models:
+                index = source and unified_index.get_index(model)
                 for key, value in source.items():
-                    index = unified_index.get_index(model)
                     string_key = str(key)
 
                     if string_key in index.fields and hasattr(index.fields[string_key], 'convert'):
