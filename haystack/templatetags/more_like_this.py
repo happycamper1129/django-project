@@ -2,8 +2,6 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import logging
-
 from django import template
 
 from haystack.query import SearchQuerySet
@@ -19,7 +17,7 @@ class MoreLikeThisNode(template.Node):
         self.for_types = for_types
         self.limit = limit
 
-        if self.limit is not None:
+        if not self.limit is None:
             self.limit = int(self.limit)
 
     def render(self, context):
@@ -27,7 +25,7 @@ class MoreLikeThisNode(template.Node):
             model_instance = self.model.resolve(context)
             sqs = SearchQuerySet()
 
-            if self.for_types is not None:
+            if not self.for_types is None:
                 intermediate = template.Variable(self.for_types)
                 for_types = intermediate.resolve(context).split(",")
                 search_models = []
@@ -42,14 +40,12 @@ class MoreLikeThisNode(template.Node):
 
             sqs = sqs.more_like_this(model_instance)
 
-            if self.limit is not None:
+            if not self.limit is None:
                 sqs = sqs[: self.limit]
 
             context[self.varname] = sqs
-        except Exception as exc:
-            logging.warning(
-                "Unhandled exception rendering %r: %s", self, exc, exc_info=True
-            )
+        except:
+            pass
 
         return ""
 

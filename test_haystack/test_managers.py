@@ -4,8 +4,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import datetime
 
-from django.contrib.gis.geos import Point
-from django.contrib.gis.measure import D
 from django.test import TestCase
 from test_haystack.core.models import MockModel
 
@@ -18,6 +16,7 @@ from haystack.query import (
     ValuesListSearchQuerySet,
     ValuesSearchQuerySet,
 )
+from haystack.utils.geo import D, Point
 
 from .mocks import CharPKMockSearchBackend
 from .test_views import BasicAnotherMockModelSearchIndex, BasicMockModelSearchIndex

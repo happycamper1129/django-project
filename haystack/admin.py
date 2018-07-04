@@ -36,7 +36,7 @@ class SearchChangeList(ChangeList):
         super(SearchChangeList, self).__init__(**kwargs)
 
     def get_results(self, request):
-        if SEARCH_VAR not in request.GET:
+        if not SEARCH_VAR in request.GET:
             return super(SearchChangeList, self).get_results(request)
 
         # Note that pagination is 0-based, not 1-based.
@@ -83,7 +83,7 @@ class SearchModelAdminMixin(object):
         if not self.has_change_permission(request, None):
             raise PermissionDenied
 
-        if SEARCH_VAR not in request.GET:
+        if not SEARCH_VAR in request.GET:
             # Do the usual song and dance.
             return super(SearchModelAdminMixin, self).changelist_view(
                 request, extra_context
@@ -91,13 +91,12 @@ class SearchModelAdminMixin(object):
 
         # Do a search of just this model and populate a Changelist with the
         # returned bits.
-        indexed_models = (
-            connections[self.haystack_connection]
+        if (
+            not self.model
+            in connections[self.haystack_connection]
             .get_unified_index()
             .get_indexed_models()
-        )
-
-        if self.model not in indexed_models:
+        ):
             # Oops. That model isn't being indexed. Return the usual
             # behavior instead.
             return super(SearchModelAdminMixin, self).changelist_view(
@@ -128,7 +127,7 @@ class SearchModelAdminMixin(object):
             kwargs["list_max_show_all"] = self.list_max_show_all
 
         changelist = SearchChangeList(**kwargs)
-        changelist.formset = None
+        formset = changelist.formset = None
         media = self.media
 
         # Build the action form and populate it with available actions.

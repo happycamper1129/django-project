@@ -11,7 +11,6 @@ from decimal import Decimal
 import elasticsearch
 from django.apps import apps
 from django.conf import settings
-from django.contrib.gis.geos import Point
 from django.test import TestCase
 from django.test.utils import override_settings
 
@@ -21,6 +20,7 @@ from haystack.inputs import AutoQuery
 from haystack.models import SearchResult
 from haystack.query import SQ, RelatedSearchQuerySet, SearchQuerySet
 from haystack.utils import log as logging
+from haystack.utils.geo import Point
 from haystack.utils.loading import UnifiedIndex
 
 from ..core.models import AFourthMockModel, AnotherMockModel, ASixthMockModel, MockModel
