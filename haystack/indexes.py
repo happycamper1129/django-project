@@ -11,8 +11,25 @@ from django.utils.encoding import force_text
 from django.utils.six import with_metaclass
 
 from haystack import connection_router, connections
-from haystack.constants import DEFAULT_ALIAS, DJANGO_CT, DJANGO_ID, ID, Indexable
-from haystack.fields import *
+from haystack.constants import Indexable  # NOQA — exposed as a public export
+from haystack.constants import DEFAULT_ALIAS, DJANGO_CT, DJANGO_ID, ID
+from haystack.fields import (  # NOQA — exposed as a public export
+    BooleanField,
+    CharField,
+    DateField,
+    DateTimeField,
+    DecimalField,
+    EdgeNgramField,
+    FacetCharField,
+    FacetDateTimeField,
+    FacetIntegerField,
+    FloatField,
+    IntegerField,
+    LocationField,
+    MultiValueField,
+    SearchField,
+    SearchFieldError,
+)
 from haystack.manager import SearchIndexManager
 from haystack.utils import get_facet_field_name, get_identifier, get_model_ct
 
@@ -41,7 +58,7 @@ class DeclarativeMetaclass(type):
         for field_name, obj in attrs.items():
             # Only need to check the FacetFields.
             if hasattr(obj, "facet_for"):
-                if not obj.facet_for in facet_fields:
+                if obj.facet_for not in facet_fields:
                     facet_fields[obj.facet_for] = []
 
                 facet_fields[obj.facet_for].append(field_name)
@@ -56,10 +73,10 @@ class DeclarativeMetaclass(type):
 
                 # Only check non-faceted fields for the following info.
                 if not hasattr(field, "facet_for"):
-                    if field.faceted == True:
+                    if field.faceted:
                         # If no other field is claiming this field as
                         # ``facet_for``, create a shadow ``FacetField``.
-                        if not field_name in facet_fields:
+                        if field_name not in facet_fields:
                             shadow_facet_name = get_facet_field_name(field_name)
                             shadow_facet_field = field.facet_class(facet_for=field_name)
                             shadow_facet_field.set_instance_name(shadow_facet_name)
@@ -68,7 +85,7 @@ class DeclarativeMetaclass(type):
         attrs["fields"].update(built_fields)
 
         # Assigning default 'objects' query manager if it does not already exist
-        if not "objects" in attrs:
+        if "objects" not in attrs:
             try:
                 attrs["objects"] = SearchIndexManager(attrs["Meta"].index_label)
             except (KeyError, AttributeError):
@@ -179,7 +196,8 @@ class SearchIndex(with_metaclass(DeclarativeMetaclass, threading.local)):
 
         if hasattr(self, "get_queryset"):
             warnings.warn(
-                "'SearchIndex.get_queryset' was deprecated in Haystack v2. Please rename the method 'index_queryset'."
+                "'SearchIndex.get_queryset' was deprecated in Haystack v2."
+                " Please rename the method 'index_queryset'."
             )
             index_qs = self.get_queryset()
         else:

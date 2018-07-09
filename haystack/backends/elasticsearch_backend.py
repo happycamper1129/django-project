@@ -123,13 +123,13 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             connection_alias, **connection_options
         )
 
-        if not "URL" in connection_options:
+        if "URL" not in connection_options:
             raise ImproperlyConfigured(
                 "You must specify a 'URL' in your settings for connection '%s'."
                 % connection_alias
             )
 
-        if not "INDEX_NAME" in connection_options:
+        if "INDEX_NAME" not in connection_options:
             raise ImproperlyConfigured(
                 "You must specify a 'INDEX_NAME' in your settings for connection '%s'."
                 % connection_alias
@@ -735,7 +735,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
                     additional_fields["_point_of_origin"] = distance_point
 
                     if geo_sort and raw_result.get("sort"):
-                        from haystack.utils.geo import Distance
+                        from django.contrib.gis.measure import Distance
 
                         additional_fields["_distance"] = Distance(
                             km=float(raw_result["sort"][0])

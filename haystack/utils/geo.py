@@ -2,9 +2,6 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from django.contrib.gis.geos import Point
-from django.contrib.gis.measure import D, Distance
-
 from haystack.constants import WGS_84_SRID
 from haystack.exceptions import SpatialError
 
@@ -58,7 +55,7 @@ def ensure_distance(dist):
     try:
         # Since we mostly only care about the ``.km`` attribute, make sure
         # it's there.
-        km = dist.km
+        dist.km
     except AttributeError:
         raise SpatialError("'%s' does not appear to be a 'Distance' object." % dist)
 
