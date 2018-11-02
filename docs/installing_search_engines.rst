@@ -17,11 +17,9 @@ Solr 4.x+ with a little effort. Installation is relatively simple:
 For Solr 6.X::
 
     curl -LO https://archive.apache.org/dist/lucene/solr/x.Y.0/solr-X.Y.0.tgz
-    mkdir solr
     tar -C solr -xf solr-X.Y.0.tgz --strip-components=1
     cd solr
-    ./bin/solr start                                    # start solr
-    ./bin/solr create -c tester -n basic_config         # create core named 'tester'
+    ./bin/solr create -c tester -n basic_config
 
 By default this will create a core with a managed schema.  This setup is dynamic
 but not useful for haystack, and we'll need to configure solr to use a static

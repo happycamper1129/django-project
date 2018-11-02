@@ -22,13 +22,7 @@ from haystack.backends import (
     EmptyResults,
     log_query,
 )
-from haystack.constants import (
-    DJANGO_CT,
-    DJANGO_ID,
-    FUZZY_WHOOSH_MAX_EDITS,
-    FUZZY_WHOOSH_MIN_PREFIX,
-    ID,
-)
+from haystack.constants import DJANGO_CT, DJANGO_ID, ID
 from haystack.exceptions import MissingDependency, SearchBackendError, SkipDocument
 from haystack.inputs import Clean, Exact, PythonData, Raw
 from haystack.models import SearchResult
@@ -65,7 +59,7 @@ from whoosh.fields import (
 from whoosh.filedb.filestore import FileStorage, RamStorage
 from whoosh.highlight import highlight as whoosh_highlight
 from whoosh.highlight import ContextFragmenter, HtmlFormatter
-from whoosh.qparser import QueryParser, FuzzyTermPlugin
+from whoosh.qparser import QueryParser
 from whoosh.searching import ResultsPage
 from whoosh.writing import AsyncWriter
 
@@ -168,7 +162,6 @@ class WhooshSearchBackend(BaseSearchBackend):
             connections[self.connection_alias].get_unified_index().all_searchfields()
         )
         self.parser = QueryParser(self.content_field_name, schema=self.schema)
-        self.parser.add_plugins([FuzzyTermPlugin])
 
         if new_index is True:
             self.index = self.storage.create_index(self.schema)
@@ -966,7 +959,7 @@ class WhooshSearchQuery(BaseSearchQuery):
             "gte": "[%s to]",
             "lt": "{to %s}",
             "lte": "[to %s]",
-            "fuzzy": "%s~{}/%d".format(FUZZY_WHOOSH_MAX_EDITS),
+            "fuzzy": "%s~",
         }
 
         if value.post_process is False:
@@ -994,23 +987,10 @@ class WhooshSearchQuery(BaseSearchQuery):
                         possible_values = [prepared_value]
 
                     for possible_value in possible_values:
-                        possible_value_str = self.backend._from_python(
-                            possible_value
+                        terms.append(
+                            filter_types[filter_type]
+                            % self.backend._from_python(possible_value)
                         )
-                        if filter_type == "fuzzy":
-                            terms.append(
-                                filter_types[filter_type] % (
-                                    possible_value_str,
-                                    min(
-                                        FUZZY_WHOOSH_MIN_PREFIX,
-                                        len(possible_value_str)
-                                    )
-                                )
-                            )
-                        else:
-                            terms.append(
-                                filter_types[filter_type] % possible_value_str
-                            )
 
                     if len(terms) == 1:
                         query_frag = terms[0]
