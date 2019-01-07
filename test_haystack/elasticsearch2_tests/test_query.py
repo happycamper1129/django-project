@@ -4,6 +4,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import datetime
 
 import elasticsearch
+from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 from django.test import TestCase
 
@@ -139,7 +140,7 @@ class Elasticsearch2SearchQueryTestCase(TestCase):
         self.assertEqual(self.sq.clean("hello AND world"), "hello and world")
         self.assertEqual(
             self.sq.clean(
-                r'hello AND OR NOT TO + - && || ! ( ) { } [ ] ^ " ~ * ? : \ / world'
+                'hello AND OR NOT TO + - && || ! ( ) { } [ ] ^ " ~ * ? : \ / world'
             ),
             'hello and or not to \\+ \\- \\&& \\|| \\! \\( \\) \\{ \\} \\[ \\] \\^ \\" \\~ \\* \\? \\: \\\\ \\/ world',
         )
@@ -197,8 +198,6 @@ class Elasticsearch2SearchQuerySpatialBeforeReleaseTestCase(TestCase):
         """
         Test build_search_kwargs with dwithin range for Elasticsearch versions < 1.0.0
         """
-        from django.contrib.gis.geos import Point
-
         search_kwargs = self.backend.build_search_kwargs(
             "where",
             dwithin={
@@ -229,8 +228,6 @@ class Elasticsearch2SearchQuerySpatialAfterReleaseTestCase(TestCase):
         """
         Test build_search_kwargs with dwithin range for Elasticsearch versions >= 1.0.0
         """
-        from django.contrib.gis.geos import Point
-
         search_kwargs = self.backend.build_search_kwargs(
             "where",
             dwithin={
