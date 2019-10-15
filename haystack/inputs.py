@@ -5,8 +5,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import re
 import warnings
 
-from django.utils.encoding import force_text
-from six import python_2_unicode_compatible
+from django.utils.encoding import force_text, python_2_unicode_compatible
 
 
 @python_2_unicode_compatible
