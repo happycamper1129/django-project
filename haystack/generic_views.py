@@ -96,7 +96,6 @@ class FacetedSearchMixin(SearchMixin):
 
     form_class = FacetedSearchForm
     facet_fields = None
-    date_facet_fields = None
 
     def get_form_kwargs(self):
         kwargs = super(FacetedSearchMixin, self).get_form_kwargs()
@@ -112,10 +111,6 @@ class FacetedSearchMixin(SearchMixin):
         qs = super(FacetedSearchMixin, self).get_queryset()
         for field in self.facet_fields:
             qs = qs.facet(field)
-
-        for field in self.date_facet_fields:
-            qs = qs.date_facet(**field)
-
         return qs
 
 
