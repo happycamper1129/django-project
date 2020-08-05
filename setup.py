@@ -17,7 +17,7 @@ tests_require = [
     "pysolr>=3.7.0",
     "whoosh>=2.5.4,<3.0",
     "python-dateutil",
-    "geopy==2.0.0",
+    "geopy==0.95.1",
     "nose",
     "coverage",
     "requests",
