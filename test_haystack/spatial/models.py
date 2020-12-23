@@ -1,3 +1,7 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import datetime
 
 from django.db import models
@@ -13,19 +17,16 @@ class Checkin(models.Model):
     # ...and your ``search_indexes.py`` could be less complex.
     latitude = models.FloatField()
     longitude = models.FloatField()
-    comment = models.CharField(
-        max_length=140, blank=True, default="", help_text="Say something pithy."
-    )
+    comment = models.CharField(max_length=140, blank=True, default='', help_text='Say something pithy.')
     created = models.DateTimeField(default=datetime.datetime.now)
 
     class Meta:
-        ordering = ["-created"]
+        ordering = ['-created']
 
     # Again, with GeoDjango, this would be unnecessary.
     def get_location(self):
         # Nothing special about this Point, but ensure that's we don't have to worry
         # about import paths.
-        from django.contrib.gis.geos import Point
-
+        from haystack.utils.geo import Point
         pnt = Point(self.longitude, self.latitude)
         return pnt

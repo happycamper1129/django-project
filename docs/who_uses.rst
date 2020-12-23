@@ -32,16 +32,6 @@ Using: Whoosh
 * http://www.northcoastjournal.com/altweeklies/documentation/
 
 
-Teachoo
------------
-
-Teachoo uses Haystack for its site search.
-
-Using: Elasticsearch
-
-* https://www.teachoo.com/
-
-
 Trapeze
 -------
 

@@ -235,31 +235,6 @@ a highlighted version of the result::
     result = sqs[0]
     result.highlighted['text'][0] # u'Two computer scientists walk into a bar. The bartender says "<em>Foo</em>!".'
 
-The default functionality of the highlighter may not suit your needs.
-You can pass additional keyword arguments to ``highlight`` that will
-ultimately be used to build the query for your backend. Depending on the
-available arguments for your backend, you may need to pass in a dictionary
-instead of normal keyword arguments::
-
-    # Solr defines the fields to higlight by the ``hl.fl`` param. If not specified, we
-    # would only get `text` back in the ``highlighted`` dict.
-    kwargs = {
-        'hl.fl': 'other_field',
-        'hl.simple.pre': '<span class="highlighted">',
-        'hl.simple.post': '</span>'
-    }
-    sqs = SearchQuerySet().filter(content='foo').highlight(**kwargs)
-    result = sqs[0]
-    result.highlighted['other_field'][0] # u'Two computer scientists walk into a bar. The bartender says "<span class="highlighted">Foo</span>!".'
-
-Elasticsearch accepts keyword arguments::
-
-    # Use the ``pre_tag`` and ``post_tag`` keywords and pass the desired tags as lists.
-    sqs = SearchQuerySet().filter(content='foo').highlight(
-        pre_tags=['<strong>'], post_tags=['</strong>'])
-    result_example = " ".join(sqs[0].highlighted)
-    # u'Two <strong>foo</strong> computer scientists walk into a bar. The bartender says "<strong>Foo</strong>!"'
-
 ``models``
 ~~~~~~~~~~
 
@@ -312,7 +287,7 @@ Example::
 
     # For SOLR (setting f.author.facet.*; see http://wiki.apache.org/solr/SimpleFacetParameters#Parameters)
     SearchQuerySet().facet('author', mincount=1, limit=10)
-    # For Elasticsearch (see http://www.elasticsearch.org/guide/reference/api/search/facets/terms-facet.html)
+    # For ElasticSearch (see http://www.elasticsearch.org/guide/reference/api/search/facets/terms-facet.html)
     SearchQuerySet().facet('author', size=10, order='term')
 
 In the search results you get back, facet counts will be populated in the
@@ -711,8 +686,8 @@ Example::
     # {
     #    'stats_fields':{
     #       'author:{
-    #            'min': 0.0,
-    #            'max': 2199.0,
+    #            'min': 0.0, 
+    #            'max': 2199.0,  
     #            'sum': 5251.2699999999995,
     #            'count': 15,
     #            'missing': 11,
@@ -721,26 +696,8 @@ Example::
     #            'stddev': 547.737557906113
     #        }
     #    }
-    #
+    #    
     # }
-
-``set_spelling_query``
-~~~~~~~~~~~~~~~~~~~~~~~
-
-.. method:: SearchQuerySet.set_spelling_query(self, spelling_query)
-
-This method allows you to set the text which will be passed to the backend search engine for spelling
-suggestions. This is helpful when the actual query being sent to the backend has complex syntax which
-should not be seen by the spelling suggestion component.
-
-In this example, a Solr ``edismax`` query is being used to boost field and document weights and
-``set_spelling_query`` is being used to send only the actual user-entered text to the spellchecker::
-
-    alt_q = AltParser('edismax', self.query,
-                      qf='title^4 text provider^0.5',
-                      bq='django_ct:core.item^6.0')
-    sqs = sqs.filter(content=alt_q)
-    sqs = sqs.set_spelling_query(self.query)
 
 
 ``spelling_suggestion``
@@ -751,7 +708,7 @@ In this example, a Solr ``edismax`` query is being used to boost field and docum
 Returns the spelling suggestion found by the query.
 
 To work, you must set ``INCLUDE_SPELLING`` within your connection's
-settings dictionary to ``True``, and you must rebuild your index afterwards.
+settings dictionary to ``True``, and you must rebuild your index afterwards. 
 Otherwise, ``None`` will be returned.
 
 This method causes the query to evaluate and run the search if it hasn't already
@@ -825,7 +782,6 @@ Field Lookups
 
 The following lookup types are supported:
 
-* content
 * contains
 * exact
 * gt
@@ -834,11 +790,9 @@ The following lookup types are supported:
 * lte
 * in
 * startswith
-* endswith
 * range
-* fuzzy
 
-Except for ``fuzzy`` these options are similar in function to the way Django's lookup types work.
+These options are similar in function to the way Django's lookup types work.
 The actual behavior of these lookups is backend-specific.
 
 .. warning::
@@ -853,10 +807,10 @@ The actual behavior of these lookups is backend-specific.
 
 .. warning::
 
-    The ``content`` filter became the new default filter as of Haystack v2.X
+    The ``contains`` filter became the new default filter as of Haystack v2.X
     (the default in Haystack v1.X was ``exact``). This changed because ``exact``
     caused problems and was unintuitive for new people trying to use Haystack.
-    ``content`` is a much more natural usage.
+    ``contains`` is a much more natural usage.
 
     If you had an app built on Haystack v1.X & are upgrading, you'll need to
     sanity-check & possibly change any code that was relying on the default.
@@ -868,7 +822,7 @@ Example::
     SearchQuerySet().filter(content='foo')
 
     # Identical to:
-    SearchQuerySet().filter(content__content='foo')
+    SearchQuerySet().filter(content__contains='foo')
 
     # Phrase matching.
     SearchQuerySet().filter(content__exact='hello world')

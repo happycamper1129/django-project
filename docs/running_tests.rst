@@ -39,7 +39,7 @@ list of possible options::
     cd test_haystack
     ./run_tests.py --help
 
-.. _nose: https://nose.readthedocs.io/en/latest/
+.. _nose: https://nose.readthedocs.org/en/latest/
 
 Configuring Solr
 ================

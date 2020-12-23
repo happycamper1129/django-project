@@ -1,3 +1,4 @@
-import warnings
+# encoding: utf-8
 
-warnings.simplefilter("ignore", Warning)
+import warnings
+warnings.simplefilter('ignore', Warning)
