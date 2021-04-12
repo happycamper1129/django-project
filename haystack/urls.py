@@ -1,6 +1,6 @@
 # encoding: utf-8
-from django.urls import path
+from django.conf.urls import url
 
 from haystack.views import SearchView
 
-urlpatterns = [path("", SearchView(), name="haystack_search")]
+urlpatterns = [url(r"^$", SearchView(), name="haystack_search")]
