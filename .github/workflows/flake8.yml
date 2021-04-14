@@ -1,9 +1,9 @@
-name: Build docs
+name: flake8
 
 on: [pull_request, push]
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -11,7 +11,7 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: 3.9
-    - name: Install dependencies
-      run: pip install sphinx
-    - name: Build docs
-      run: cd docs && make html
+    - name: Install tools
+      run: pip install flake8
+    - name: Run flake8
+      run: flake8 example_project haystack
