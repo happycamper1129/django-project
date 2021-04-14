@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import datetime
-import warnings
 
 from django.conf import settings
 
@@ -20,7 +19,6 @@ try:
     if not ((2, 0, 0) <= elasticsearch.__version__ < (3, 0, 0)):
         raise ImportError
     from elasticsearch.helpers import bulk, scan
-    warnings.warn("ElasticSearch 2.x support deprecated, will be removed in 4.0", DeprecationWarning)
 except ImportError:
     raise MissingDependency(
         "The 'elasticsearch2' backend requires the \
