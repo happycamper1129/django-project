@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 import datetime
+import warnings
 
 from django.conf import settings
 
@@ -19,6 +19,7 @@ try:
     if not ((2, 0, 0) <= elasticsearch.__version__ < (3, 0, 0)):
         raise ImportError
     from elasticsearch.helpers import bulk, scan
+    warnings.warn("ElasticSearch 2.x support deprecated, will be removed in 4.0", DeprecationWarning)
 except ImportError:
     raise MissingDependency(
         "The 'elasticsearch2' backend requires the \
@@ -29,7 +30,7 @@ except ImportError:
 
 class Elasticsearch2SearchBackend(ElasticsearchSearchBackend):
     def __init__(self, connection_alias, **connection_options):
-        super(Elasticsearch2SearchBackend, self).__init__(
+        super().__init__(
             connection_alias, **connection_options
         )
         self.content_field_name = None
@@ -113,7 +114,7 @@ class Elasticsearch2SearchBackend(ElasticsearchSearchBackend):
         limit_to_registered_models=None,
         result_class=None,
     ):
-        kwargs = super(Elasticsearch2SearchBackend, self).build_search_kwargs(
+        kwargs = super().build_search_kwargs(
             query_string,
             sort_by,
             start_offset,
@@ -341,7 +342,7 @@ class Elasticsearch2SearchBackend(ElasticsearchSearchBackend):
         distance_point=None,
         geo_sort=False,
     ):
-        results = super(Elasticsearch2SearchBackend, self)._process_results(
+        results = super()._process_results(
             raw_results, highlight, result_class, distance_point, geo_sort
         )
         facets = {}
