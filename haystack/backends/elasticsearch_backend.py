@@ -775,7 +775,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             },
         }
 
-        for _, field_class in fields.items():
+        for field_name, field_class in fields.items():
             field_mapping = FIELD_MAPPINGS.get(
                 field_class.field_type, DEFAULT_FIELD_MAPPING
             ).copy()
