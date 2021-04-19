@@ -1,5 +1,6 @@
 from django.test import TestCase
 from django.test.utils import override_settings
+from test_haystack.core.models import MockModel
 
 from haystack.utils import (
     _lookup_identifier_method,
@@ -8,7 +9,6 @@ from haystack.utils import (
     log,
 )
 from haystack.utils.highlighting import Highlighter
-from test_haystack.core.models import MockModel
 
 
 class GetIdentifierTestCase(TestCase):

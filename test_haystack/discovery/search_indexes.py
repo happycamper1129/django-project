@@ -1,5 +1,6 @@
-from haystack import indexes
 from test_haystack.discovery.models import Bar, Foo
+
+from haystack import indexes
 
 
 class FooIndex(indexes.SearchIndex, indexes.Indexable):

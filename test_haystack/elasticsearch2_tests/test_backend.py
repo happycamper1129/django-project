@@ -1,7 +1,6 @@
 import datetime
 import logging as std_logging
 import operator
-import pickle
 import unittest
 from decimal import Decimal
 
@@ -21,6 +20,8 @@ from haystack.utils.loading import UnifiedIndex
 
 from ..core.models import AFourthMockModel, AnotherMockModel, ASixthMockModel, MockModel
 from ..mocks import MockSearchResult
+
+import pickle
 
 
 def clear_elasticsearch_index():
@@ -570,7 +571,6 @@ class Elasticsearch2SearchBackendTestCase(TestCase):
 
     def test_spatial_search_parameters(self):
         from django.contrib.gis.geos import Point
-
         p1 = Point(1.23, 4.56)
         kwargs = self.sb.build_search_kwargs(
             "*:*",

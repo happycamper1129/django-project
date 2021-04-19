@@ -1,7 +1,6 @@
 import datetime
 import logging as std_logging
 import os
-import pickle
 import unittest
 from decimal import Decimal
 from unittest.mock import patch
@@ -21,6 +20,8 @@ from haystack.utils.loading import UnifiedIndex
 
 from ..core.models import AFourthMockModel, AnotherMockModel, ASixthMockModel, MockModel
 from ..mocks import MockSearchResult
+
+import pickle
 
 
 def clear_solr_index():
