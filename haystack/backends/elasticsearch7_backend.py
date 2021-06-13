@@ -4,7 +4,10 @@ import warnings
 from django.conf import settings
 
 import haystack
-from haystack.backends import BaseEngine
+from haystack.backends import (
+    BaseEngine,
+    VALID_GAPS,
+)
 from haystack.backends.elasticsearch_backend import (
     ElasticsearchSearchBackend,
     ElasticsearchSearchQuery,
@@ -13,6 +16,7 @@ from haystack.constants import (
     ALL_FIELD,
     DEFAULT_OPERATOR,
     DJANGO_CT,
+    DJANGO_ID,
     FUZZINESS,
 )
 from haystack.exceptions import MissingDependency
@@ -21,21 +25,61 @@ from haystack.utils import get_identifier, get_model_ct
 try:
     import elasticsearch
 
-    if not ((5, 0, 0) <= elasticsearch.__version__ < (6, 0, 0)):
+    if not ((7, 0, 0) <= elasticsearch.__version__ < (8, 0, 0)):
         raise ImportError
     from elasticsearch.helpers import bulk, scan
 except ImportError:
     raise MissingDependency(
-        "The 'elasticsearch5' backend requires the \
-                            installation of 'elasticsearch>=5.0.0,<6.0.0'. \
+        "The 'elasticsearch7' backend requires the \
+                            installation of 'elasticsearch>=7.0.0,<8.0.0'. \
                             Please refer to the documentation."
     )
 
 
-class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
+FACET_FIELD_NAME = 'facet'
+DEFAULT_FIELD_MAPPING = {
+    "type": "text",
+    "analyzer": "snowball",
+    "copy_to": "_all",
+}
+FIELD_MAPPINGS = {
+    "edge_ngram": {
+        "type": "text",
+        "analyzer": "edgengram_analyzer",
+        "copy_to": "_all",
+    },
+    "ngram": {
+        "type": "text",
+        "analyzer": "ngram_analyzer",
+        "copy_to": "_all",
+    },
+    "date": {"type": "date"},
+    "datetime": {"type": "date"},
+    "location": {"type": "geo_point"},
+    "boolean": {"type": "boolean"},
+    "float": {"type": "float"},
+    "long": {"type": "long"},
+    "integer": {"type": "long"},
+}
+
+
+class Elasticsearch7SearchBackend(ElasticsearchSearchBackend):
     def __init__(self, connection_alias, **connection_options):
         super().__init__(connection_alias, **connection_options)
         self.content_field_name = None
+
+    def _prepare_object(self, index, obj):
+        return index.full_prepare(obj, with_facet=False)
+
+    def _get_facet_field_name(self, fieldname):
+        if fieldname.endswith("." + FACET_FIELD_NAME):
+            return fieldname
+        return fieldname + "." + FACET_FIELD_NAME
+
+    def _get_original_field_name(self, facet_fieldname):
+        if facet_fieldname.endswith("." + FACET_FIELD_NAME):
+            return facet_fieldname.replace("." + FACET_FIELD_NAME, "")
+        return facet_fieldname
 
     def clear(self, models=None, commit=True):
         """
@@ -130,7 +174,6 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
                         "default_operator": DEFAULT_OPERATOR,
                         "query": query_string,
                         "analyze_wildcard": True,
-                        "auto_generate_phrase_queries": True,
                         "fuzziness": FUZZINESS,
                     }
                 }
@@ -203,13 +246,14 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
         if facets is not None:
             kwargs.setdefault("aggs", {})
 
-            for facet_fieldname, extra_options in facets.items():
+            for fieldname, extra_options in facets.items():
+                facet_fieldname = self._get_facet_field_name(fieldname)
                 facet_options = {
                     "meta": {"_type": "terms"},
-                    "terms": {"field": index.get_facet_fieldname(facet_fieldname)},
+                    "terms": {"field": facet_fieldname},
                 }
                 if "order" in extra_options:
-                    facet_options["meta"]["order"] = extra_options.pop("order")
+                    facet_options["terms"]["order"] = extra_options.pop("order")
                 # Special cases for options applied at the facet level (not the terms level).
                 if extra_options.pop("global_scope", False):
                     # Renamed "global_scope" since "global" is a python keyword.
@@ -222,7 +266,7 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
         if date_facets is not None:
             kwargs.setdefault("aggs", {})
 
-            for facet_fieldname, value in date_facets.items():
+            for fieldname, value in date_facets.items():
                 # Need to detect on gap_by & only add amount if it's more than one.
                 interval = value.get("gap_by").lower()
 
@@ -234,13 +278,13 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
                     # Just the first character is valid for use.
                     interval = "%s%s" % (value["gap_amount"], interval[:1])
 
-                kwargs["aggs"][facet_fieldname] = {
+                kwargs["aggs"][fieldname] = {
                     "meta": {"_type": "date_histogram"},
-                    "date_histogram": {"field": facet_fieldname, "interval": interval},
+                    "date_histogram": {"field": fieldname, "interval": interval},
                     "aggs": {
-                        facet_fieldname: {
+                        fieldname: {
                             "date_range": {
-                                "field": facet_fieldname,
+                                "field": fieldname,
                                 "ranges": [
                                     {
                                         "from": self._from_python(
@@ -257,8 +301,8 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
         if query_facets is not None:
             kwargs.setdefault("aggs", {})
 
-            for facet_fieldname, value in query_facets:
-                kwargs["aggs"][facet_fieldname] = {
+            for fieldname, value in query_facets:
+                kwargs["aggs"][fieldname] = {
                     "meta": {"_type": "query"},
                     "filter": {"query_string": {"query": value}},
                 }
@@ -365,7 +409,7 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
 
         try:
             # More like this Query
-            # https://www.elastic.co/guide/en/elasticsearch/reference/2.2/query-dsl-mlt-query.html
+            # https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-mlt-query.html
             mlt_query = {
                 "query": {
                     "more_like_this": {
@@ -430,6 +474,9 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
 
         return self._process_results(raw_results, result_class=result_class)
 
+    def _process_hits(self, raw_results):
+        return raw_results.get("hits", {}).get("total", {}).get("value", 0)
+
     def _process_results(
         self,
         raw_results,
@@ -446,22 +493,23 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
             facets = {"fields": {}, "dates": {}, "queries": {}}
 
             for facet_fieldname, facet_info in raw_results["aggregations"].items():
+                field_name = self._get_original_field_name(facet_fieldname)
                 facet_type = facet_info["meta"]["_type"]
                 if facet_type == "terms":
-                    facets["fields"][facet_fieldname] = [
+                    facets["fields"][field_name] = [
                         (individual["key"], individual["doc_count"])
                         for individual in facet_info["buckets"]
                     ]
                     if "order" in facet_info["meta"]:
                         if facet_info["meta"]["order"] == "reverse_count":
                             srt = sorted(
-                                facets["fields"][facet_fieldname], key=lambda x: x[1]
+                                facets["fields"][field_name], key=lambda x: x[1]
                             )
-                            facets["fields"][facet_fieldname] = srt
+                            facets["fields"][field_name] = srt
                 elif facet_type == "date_histogram":
                     # Elasticsearch provides UTC timestamps with an extra three
                     # decimals of precision, which datetime barfs on.
-                    facets["dates"][facet_fieldname] = [
+                    facets["dates"][field_name] = [
                         (
                             datetime.datetime.utcfromtimestamp(
                                 individual["key"] / 1000
@@ -471,18 +519,116 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
                         for individual in facet_info["buckets"]
                     ]
                 elif facet_type == "query":
-                    facets["queries"][facet_fieldname] = facet_info["doc_count"]
+                    facets["queries"][field_name] = facet_info["doc_count"]
         results["facets"] = facets
         return results
 
+    def _get_common_mapping(self):
+        return {
+            ALL_FIELD: {
+                "type": "text",  # For backward compatibility
+                "analyzer": "snowball",
+            },
+            DJANGO_CT: {
+                "type": "keyword",
+            },
+            DJANGO_ID: {
+                "type": "keyword",
+            },
+        }
 
-class Elasticsearch5SearchQuery(ElasticsearchSearchQuery):
+    def build_schema(self, fields):
+        content_field_name = ""
+        mapping = self._get_common_mapping()
+        facet_mapping = {}
+
+        for _, field_class in fields.items():
+            if hasattr(field_class, "facet_for") and field_class.field_type == "string":
+                # ES7 has keyword for all text fields
+                facet_mapping[field_class.facet_for] = {
+                    "fields": {
+                        FACET_FIELD_NAME: {
+                            "type":"keyword",
+                        },
+                    },
+                }
+                continue
+
+            field_mapping = FIELD_MAPPINGS.get(
+                field_class.field_type, DEFAULT_FIELD_MAPPING
+            ).copy()
+            if field_class.boost != 1.0:
+                field_mapping["boost"] = field_class.boost
+
+            if field_class.document is True:
+                content_field_name = field_class.index_fieldname
+
+            # Do this last to override `text` fields.
+            if field_class.field_type == "string" and field_class.indexed is False:
+                # Change to keyword type
+                field_mapping["type"] = "keyword"
+                del field_mapping["analyzer"]
+                del field_mapping["copy_to"]
+
+            mapping[field_class.index_fieldname] = field_mapping
+
+        for facet_fieldname, facet_field in facet_mapping.items():
+            if facet_fieldname not in mapping:
+                continue
+            mapping[facet_fieldname].update(facet_field)
+        return (content_field_name, mapping)
+
+
+class Elasticsearch7SearchQuery(ElasticsearchSearchQuery):
     def add_field_facet(self, field, **options):
         """Adds a regular facet on a field."""
+        from haystack import connections
+
         # to be renamed to the facet fieldname by build_search_kwargs later
-        self.facets[field] = options.copy()
+        self.facets[connections[self._using].get_backend(
+            )._get_facet_field_name(field)] = options.copy()
+
+    def add_date_facet(self, field, start_date, end_date, gap_by, gap_amount=1):
+        """Adds a date-based facet on a field."""
+        if gap_by not in VALID_GAPS:
+            raise FacetingError(
+                "The gap_by ('%s') must be one of the following: %s."
+                % (gap_by, ", ".join(VALID_GAPS))
+            )
+
+        self.date_facets[field] = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "gap_by": gap_by,
+            "gap_amount": gap_amount,
+        }
+
+    def add_query_facet(self, field, query):
+        """Adds a query facet on a field."""
+        self.query_facets.append((field, query, ), )
+
+    def post_process_facets(self, results):
+        # Handle renaming the facet fields. Undecorate and all that.
+        from haystack import connections
+
+        revised_facets = {}
+        field_data = connections[self._using].get_unified_index().all_searchfields()
+
+        for facet_type, field_details in results.get("facets", {}).items():
+            temp_facets = {}
+
+            for field, field_facets in field_details.items():
+                original_field_name = connections[self._using].get_backend(
+                    )._get_original_field_name(field)
+                if original_field_name not in field_data:
+                    original_field_name = field
+                temp_facets[original_field_name] = field_facets
+
+            revised_facets[facet_type] = temp_facets
+
+        return revised_facets
 
 
-class Elasticsearch5SearchEngine(BaseEngine):
-    backend = Elasticsearch5SearchBackend
-    query = Elasticsearch5SearchQuery
+class Elasticsearch7SearchEngine(BaseEngine):
+    backend = Elasticsearch7SearchBackend
+    query = Elasticsearch7SearchQuery
