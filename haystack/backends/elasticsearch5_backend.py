@@ -9,12 +9,7 @@ from haystack.backends.elasticsearch_backend import (
     ElasticsearchSearchBackend,
     ElasticsearchSearchQuery,
 )
-from haystack.constants import (
-    ALL_FIELD,
-    DEFAULT_OPERATOR,
-    DJANGO_CT,
-    FUZZINESS,
-)
+from haystack.constants import DEFAULT_OPERATOR, DJANGO_CT, FUZZINESS
 from haystack.exceptions import MissingDependency
 from haystack.utils import get_identifier, get_model_ct
 
@@ -192,7 +187,7 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
                     "text": spelling_query or query_string,
                     "term": {
                         # Using content_field here will result in suggestions of stemmed words.
-                        "field": ALL_FIELD,
+                        "field": "_all"
                     },
                 }
             }
