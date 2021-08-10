@@ -9,7 +9,7 @@ from haystack.backends.elasticsearch_backend import (
     ElasticsearchSearchBackend,
     ElasticsearchSearchQuery,
 )
-from haystack.constants import ALL_FIELD, DEFAULT_OPERATOR, DJANGO_CT, FUZZINESS
+from haystack.constants import DEFAULT_OPERATOR, DJANGO_CT, FUZZINESS
 from haystack.exceptions import MissingDependency
 from haystack.utils import get_identifier, get_model_ct
 
@@ -62,7 +62,7 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
                     self.conn,
                     query=query,
                     index=self.index_name,
-                    **self._get_doc_type_option(),
+                    doc_type="modelresult",
                 )
                 actions = (
                     {"_op_type": "delete", "_id": doc["_id"]} for doc in generator
@@ -71,7 +71,7 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
                     self.conn,
                     actions=actions,
                     index=self.index_name,
-                    **self._get_doc_type_option(),
+                    doc_type="modelresult",
                 )
                 self.conn.indices.refresh(index=self.index_name)
 
@@ -187,7 +187,7 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
                     "text": spelling_query or query_string,
                     "term": {
                         # Using content_field here will result in suggestions of stemmed words.
-                        "field": ALL_FIELD,
+                        "field": "_all"
                     },
                 }
             }
@@ -407,9 +407,9 @@ class Elasticsearch5SearchBackend(ElasticsearchSearchBackend):
             raw_results = self.conn.search(
                 body=mlt_query,
                 index=self.index_name,
+                doc_type="modelresult",
                 _source=True,
-                **self._get_doc_type_option(),
-                **params,
+                **params
             )
         except elasticsearch.TransportError as e:
             if not self.silently_fail:

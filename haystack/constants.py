@@ -7,7 +7,6 @@ ID = getattr(settings, "HAYSTACK_ID_FIELD", "id")
 DJANGO_CT = getattr(settings, "HAYSTACK_DJANGO_CT_FIELD", "django_ct")
 DJANGO_ID = getattr(settings, "HAYSTACK_DJANGO_ID_FIELD", "django_id")
 DOCUMENT_FIELD = getattr(settings, "HAYSTACK_DOCUMENT_FIELD", "text")
-ALL_FIELD = "_all"
 
 # Default operator. Valid options are AND/OR.
 DEFAULT_OPERATOR = getattr(settings, "HAYSTACK_DEFAULT_OPERATOR", "AND")
@@ -48,7 +47,7 @@ ITERATOR_LOAD_PER_QUERY = getattr(settings, "HAYSTACK_ITERATOR_LOAD_PER_QUERY", 
 
 
 # A marker class in the hierarchy to indicate that it handles search data.
-class Indexable(object):
+class Indexable:
     haystack_use_for_indexing = True
 
 

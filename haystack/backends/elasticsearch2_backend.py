@@ -66,7 +66,7 @@ class Elasticsearch2SearchBackend(ElasticsearchSearchBackend):
                     self.conn,
                     query=query,
                     index=self.index_name,
-                    **self._get_doc_type_option(),
+                    doc_type="modelresult",
                 )
                 actions = (
                     {"_op_type": "delete", "_id": doc["_id"]} for doc in generator
@@ -75,7 +75,7 @@ class Elasticsearch2SearchBackend(ElasticsearchSearchBackend):
                     self.conn,
                     actions=actions,
                     index=self.index_name,
-                    **self._get_doc_type_option(),
+                    doc_type="modelresult",
                 )
                 self.conn.indices.refresh(index=self.index_name)
 
@@ -317,9 +317,9 @@ class Elasticsearch2SearchBackend(ElasticsearchSearchBackend):
             raw_results = self.conn.search(
                 body=mlt_query,
                 index=self.index_name,
+                doc_type="modelresult",
                 _source=True,
-                **self._get_doc_type_option(),
-                **params,
+                **params
             )
         except elasticsearch.TransportError as e:
             if not self.silently_fail:
