@@ -11,7 +11,7 @@ from haystack.query import SQ, SearchQuerySet
 from ..core.models import AnotherMockModel, MockModel
 
 
-class Elasticsearch5SearchQueryTestCase(TestCase):
+class Elasticsearch7SearchQueryTestCase(TestCase):
     def setUp(self):
         super().setUp()
         self.sq = connections["elasticsearch"].get_query()
@@ -157,7 +157,7 @@ class Elasticsearch5SearchQueryTestCase(TestCase):
         self.assertTrue(issubclass(self.sq.result_class, SearchResult))
 
         # Custom class.
-        class IttyBittyResult:
+        class IttyBittyResult(object):
             pass
 
         self.sq.set_result_class(IttyBittyResult)
