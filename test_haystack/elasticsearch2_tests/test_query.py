@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import datetime
 
 import elasticsearch
@@ -14,7 +17,7 @@ from ..core.models import AnotherMockModel, MockModel
 
 class Elasticsearch2SearchQueryTestCase(TestCase):
     def setUp(self):
-        super().setUp()
+        super(Elasticsearch2SearchQueryTestCase, self).setUp()
         self.sq = connections["elasticsearch"].get_query()
 
     def test_build_query_all(self):
@@ -158,7 +161,7 @@ class Elasticsearch2SearchQueryTestCase(TestCase):
         self.assertTrue(issubclass(self.sq.result_class, SearchResult))
 
         # Custom class.
-        class IttyBittyResult:
+        class IttyBittyResult(object):
             pass
 
         self.sq.set_result_class(IttyBittyResult)
@@ -182,7 +185,7 @@ class Elasticsearch2SearchQueryTestCase(TestCase):
 
 class Elasticsearch2SearchQuerySpatialBeforeReleaseTestCase(TestCase):
     def setUp(self):
-        super().setUp()
+        super(Elasticsearch2SearchQuerySpatialBeforeReleaseTestCase, self).setUp()
         self.backend = connections["elasticsearch"].get_backend()
         self._elasticsearch_version = elasticsearch.VERSION
         elasticsearch.VERSION = (0, 9, 9)
@@ -214,7 +217,7 @@ class Elasticsearch2SearchQuerySpatialBeforeReleaseTestCase(TestCase):
 
 class Elasticsearch2SearchQuerySpatialAfterReleaseTestCase(TestCase):
     def setUp(self):
-        super().setUp()
+        super(Elasticsearch2SearchQuerySpatialAfterReleaseTestCase, self).setUp()
         self.backend = connections["elasticsearch"].get_backend()
         self._elasticsearch_version = elasticsearch.VERSION
         elasticsearch.VERSION = (1, 0, 0)

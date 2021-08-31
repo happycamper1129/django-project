@@ -1,3 +1,7 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django.conf import settings
 from django.core.paginator import InvalidPage, Paginator
 from django.http import Http404
@@ -9,7 +13,7 @@ from haystack.query import EmptySearchQuerySet
 RESULTS_PER_PAGE = getattr(settings, "HAYSTACK_SEARCH_RESULTS_PER_PAGE", 20)
 
 
-class SearchView:
+class SearchView(object):
     template = "search/search.html"
     extra_context = {}
     query = ""
@@ -169,7 +173,7 @@ class FacetedSearchView(SearchView):
         if kwargs.get("form_class") is None:
             kwargs["form_class"] = FacetedSearchForm
 
-        super().__init__(*args, **kwargs)
+        super(FacetedSearchView, self).__init__(*args, **kwargs)
 
     def build_form(self, form_kwargs=None):
         if form_kwargs is None:
@@ -179,10 +183,10 @@ class FacetedSearchView(SearchView):
         # facet expressions:
         form_kwargs["selected_facets"] = self.request.GET.getlist("selected_facets")
 
-        return super().build_form(form_kwargs)
+        return super(FacetedSearchView, self).build_form(form_kwargs)
 
     def extra_context(self):
-        extra = super().extra_context()
+        extra = super(FacetedSearchView, self).extra_context()
         extra["request"] = self.request
         extra["facets"] = self.results.facet_counts()
         return extra

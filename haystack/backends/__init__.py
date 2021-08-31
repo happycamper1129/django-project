@@ -1,18 +1,20 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
 import copy
 from copy import deepcopy
 from time import time
-
 from django.conf import settings
 from django.db.models import Q
 from django.db.models.base import ModelBase
+from django.utils import six
 from django.utils import tree
-from django.utils.encoding import force_str
+from django.utils.encoding import force_text
 
-from haystack.constants import DEFAULT_ALIAS, FILTER_SEPARATOR, VALID_FILTERS
-from haystack.exceptions import FacetingError, MoreLikeThisError
+from haystack.constants import VALID_FILTERS, FILTER_SEPARATOR, DEFAULT_ALIAS
+from haystack.exceptions import MoreLikeThisError, FacetingError
 from haystack.models import SearchResult
-from haystack.utils import get_model_ct
 from haystack.utils.loading import UnifiedIndex
+from haystack.utils import get_model_ct
 
 VALID_GAPS = ["year", "month", "day", "hour", "minute", "second"]
 
@@ -50,7 +52,7 @@ def log_query(func):
     return wrapper
 
 
-class EmptyResults:
+class EmptyResults(object):
     hits = 0
     docs = []
 
@@ -64,7 +66,7 @@ class EmptyResults:
             raise IndexError("It's not here.")
 
 
-class BaseSearchBackend:
+class BaseSearchBackend(object):
     """
     Abstract search engine base class.
     """
@@ -158,7 +160,7 @@ class BaseSearchBackend:
         Hook to give the backend a chance to prep an attribute value before
         sending it to the search engine. By default, just force it to unicode.
         """
-        return force_str(value)
+        return force_text(value)
 
     def more_like_this(
         self, model_instance, additional_query_string=None, result_class=None
@@ -310,6 +312,9 @@ class SearchNode(tree.Node):
         """
         return bool(self.children)
 
+    def __nonzero__(self):  # Python 2 compatibility
+        return type(self).__bool__(self)
+
     def __contains__(self, other):
         """
         Returns True is 'other' is a direct child of this instance.
@@ -399,7 +404,12 @@ class SearchNode(tree.Node):
         )
 
     def _repr_query_fragment_callback(self, field, filter_type, value):
-        return "%s%s%s=%s" % (field, FILTER_SEPARATOR, filter_type, force_str(value))
+        if six.PY3:
+            value = force_text(value)
+        else:
+            value = force_text(value).encode("utf8")
+
+        return "%s%s%s=%s" % (field, FILTER_SEPARATOR, filter_type, value)
 
     def as_query_string(self, query_fragment_callback):
         """
@@ -451,7 +461,7 @@ class SQ(Q, SearchNode):
     pass
 
 
-class BaseSearchQuery:
+class BaseSearchQuery(object):
     """
     A base class for handling the query itself.
 
@@ -515,7 +525,7 @@ class BaseSearchQuery:
     def __getstate__(self):
         """For pickling."""
         obj_dict = self.__dict__.copy()
-        del obj_dict["backend"]
+        del (obj_dict["backend"])
         return obj_dict
 
     def __setstate__(self, obj_dict):
@@ -772,7 +782,7 @@ class BaseSearchQuery:
 
         A basic (override-able) implementation is provided.
         """
-        if not isinstance(query_fragment, str):
+        if not isinstance(query_fragment, six.string_types):
             return query_fragment
 
         words = query_fragment.split()
@@ -916,7 +926,7 @@ class BaseSearchQuery:
 
     def add_dwithin(self, field, point, distance):
         """Adds radius-based parameters to search query."""
-        from haystack.utils.geo import ensure_distance, ensure_point
+        from haystack.utils.geo import ensure_point, ensure_distance
 
         self.dwithin = {
             "field": field,
@@ -1072,7 +1082,7 @@ class BaseSearchQuery:
         return clone
 
 
-class BaseEngine:
+class BaseEngine(object):
     backend = BaseSearchBackend
     query = BaseSearchQuery
     unified_index = UnifiedIndex

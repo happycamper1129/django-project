@@ -1,3 +1,7 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import json
 import os
 import re
@@ -7,8 +11,9 @@ import warnings
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.utils.datetime_safe import date, datetime
-from django.utils.encoding import force_str
+from django.utils import six
+from django.utils.datetime_safe import datetime
+from django.utils.encoding import force_text
 
 from haystack.backends import (
     BaseEngine,
@@ -45,20 +50,28 @@ if not hasattr(whoosh, "__version__") or whoosh.__version__ < (2, 5, 0):
 # Bubble up the correct error.
 from whoosh import index
 from whoosh.analysis import StemmingAnalyzer
-from whoosh.fields import BOOLEAN, DATETIME
 from whoosh.fields import ID as WHOOSH_ID
-from whoosh.fields import IDLIST, KEYWORD, NGRAM, NGRAMWORDS, NUMERIC, TEXT, Schema
+from whoosh.fields import (
+    BOOLEAN,
+    DATETIME,
+    IDLIST,
+    KEYWORD,
+    NGRAM,
+    NGRAMWORDS,
+    NUMERIC,
+    Schema,
+    TEXT,
+)
 from whoosh.filedb.filestore import FileStorage, RamStorage
-from whoosh.highlight import ContextFragmenter, HtmlFormatter
 from whoosh.highlight import highlight as whoosh_highlight
-from whoosh.qparser import FuzzyTermPlugin, QueryParser
+from whoosh.highlight import ContextFragmenter, HtmlFormatter
+from whoosh.qparser import QueryParser, FuzzyTermPlugin
 from whoosh.searching import ResultsPage
-from whoosh.sorting import Count, DateRangeFacet, FieldFacet
-from whoosh.support.relativedelta import relativedelta as RelativeDelta
 from whoosh.writing import AsyncWriter
 
+
 DATETIME_REGEX = re.compile(
-    r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})T(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(\.\d{3,6}Z?)?$"
+    "^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})T(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(\.\d{3,6}Z?)?$"
 )
 LOCALS = threading.local()
 LOCALS.RAM_STORE = None
@@ -103,7 +116,9 @@ class WhooshSearchBackend(BaseSearchBackend):
     )
 
     def __init__(self, connection_alias, **connection_options):
-        super().__init__(connection_alias, **connection_options)
+        super(WhooshSearchBackend, self).__init__(
+            connection_alias, **connection_options
+        )
         self.setup_complete = False
         self.use_file_storage = True
         self.post_limit = getattr(connection_options, "POST_LIMIT", 128 * 1024 * 1024)
@@ -176,7 +191,7 @@ class WhooshSearchBackend(BaseSearchBackend):
         initial_key_count = len(schema_fields)
         content_field_name = ""
 
-        for _, field_class in fields.items():
+        for field_name, field_class in fields.items():
             if field_class.is_multivalued:
                 if field_class.indexed is False:
                     schema_fields[field_class.index_fieldname] = IDLIST(
@@ -228,7 +243,7 @@ class WhooshSearchBackend(BaseSearchBackend):
             else:
                 schema_fields[field_class.index_fieldname] = TEXT(
                     stored=True,
-                    analyzer=field_class.analyzer or StemmingAnalyzer(),
+                    analyzer=StemmingAnalyzer(),
                     field_boost=field_class.boost,
                     sortable=True,
                 )
@@ -286,8 +301,6 @@ class WhooshSearchBackend(BaseSearchBackend):
         if len(iterable) > 0:
             # For now, commit no matter what, as we run into locking issues otherwise.
             writer.commit()
-            if writer.ident is not None:
-                writer.join()
 
     def remove(self, obj_or_string, commit=True):
         if not self.setup_complete:
@@ -415,7 +428,7 @@ class WhooshSearchBackend(BaseSearchBackend):
         if len(query_string) == 0:
             return {"results": [], "hits": 0}
 
-        query_string = force_str(query_string)
+        query_string = force_text(query_string)
 
         # A one-character query (non-wildcard) gets nabbed by a stopwords
         # filter and should yield zero results.
@@ -455,31 +468,13 @@ class WhooshSearchBackend(BaseSearchBackend):
 
             sort_by = sort_by_list
 
-        group_by = []
-        facet_types = {}
         if facets is not None:
-            group_by += [
-                FieldFacet(facet, allow_overlap=True, maptype=Count) for facet in facets
-            ]
-            facet_types.update({facet: "fields" for facet in facets})
+            warnings.warn("Whoosh does not handle faceting.", Warning, stacklevel=2)
 
         if date_facets is not None:
-
-            def _fixup_datetime(dt):
-                if isinstance(dt, datetime):
-                    return dt
-                if isinstance(dt, date):
-                    return datetime(dt.year, dt.month, dt.day)
-                raise ValueError
-
-            for key, value in date_facets.items():
-                start = _fixup_datetime(value["start_date"])
-                end = _fixup_datetime(value["end_date"])
-                gap_by = value["gap_by"]
-                gap_amount = value.get("gap_amount", 1)
-                gap = RelativeDelta(**{"%ss" % gap_by: gap_amount})
-                group_by.append(DateRangeFacet(key, start, end, gap, maptype=Count))
-                facet_types[key] = "dates"
+            warnings.warn(
+                "Whoosh does not handle date faceting.", Warning, stacklevel=2
+            )
 
         if query_facets is not None:
             warnings.warn(
@@ -519,13 +514,13 @@ class WhooshSearchBackend(BaseSearchBackend):
 
             for nq in narrow_queries:
                 recent_narrowed_results = narrow_searcher.search(
-                    self.parser.parse(force_str(nq)), limit=None
+                    self.parser.parse(force_text(nq)), limit=None
                 )
 
                 if len(recent_narrowed_results) <= 0:
                     return {"results": [], "hits": 0}
 
-                if narrowed_results is not None:
+                if narrowed_results:
                     narrowed_results.filter(recent_narrowed_results)
                 else:
                     narrowed_results = recent_narrowed_results
@@ -546,7 +541,6 @@ class WhooshSearchBackend(BaseSearchBackend):
                 "pagelen": page_length,
                 "sortedby": sort_by,
                 "reverse": reverse,
-                "groupedby": group_by,
             }
 
             # Handle the case where the results have been narrowed.
@@ -572,7 +566,6 @@ class WhooshSearchBackend(BaseSearchBackend):
                 query_string=query_string,
                 spelling_query=spelling_query,
                 result_class=result_class,
-                facet_types=facet_types,
             )
             searcher.close()
 
@@ -649,7 +642,7 @@ class WhooshSearchBackend(BaseSearchBackend):
 
             for nq in narrow_queries:
                 recent_narrowed_results = narrow_searcher.search(
-                    self.parser.parse(force_str(nq)), limit=None
+                    self.parser.parse(force_text(nq)), limit=None
                 )
 
                 if len(recent_narrowed_results) <= 0:
@@ -709,7 +702,6 @@ class WhooshSearchBackend(BaseSearchBackend):
         query_string="",
         spelling_query=None,
         result_class=None,
-        facet_types=None,
     ):
         from haystack import connections
 
@@ -722,39 +714,10 @@ class WhooshSearchBackend(BaseSearchBackend):
         if result_class is None:
             result_class = SearchResult
 
+        facets = {}
         spelling_suggestion = None
         unified_index = connections[self.connection_alias].get_unified_index()
         indexed_models = unified_index.get_indexed_models()
-
-        facets = {}
-
-        if facet_types:
-            facets = {
-                "fields": {},
-                "dates": {},
-                "queries": {},
-            }
-            for facet_fieldname in raw_page.results.facet_names():
-                group = raw_page.results.groups(facet_fieldname)
-                facet_type = facet_types[facet_fieldname]
-
-                # Extract None item for later processing, if present.
-                none_item = group.pop(None, None)
-
-                lst = facets[facet_type][facet_fieldname] = sorted(
-                    group.items(), key=(lambda itm: (-itm[1], itm[0]))
-                )
-
-                if none_item is not None:
-                    # Inject None item back into the results.
-                    none_entry = (None, none_item)
-                    if not lst or lst[-1][1] >= none_item:
-                        lst.append(none_entry)
-                    else:
-                        for i, value in enumerate(lst):
-                            if value[1] < none_item:
-                                lst.insert(i, none_entry)
-                                break
 
         for doc_offset, raw_result in enumerate(raw_page):
             score = raw_page.score(doc_offset) or 0
@@ -772,7 +735,7 @@ class WhooshSearchBackend(BaseSearchBackend):
                     ):
                         # Special-cased due to the nature of KEYWORD fields.
                         if index.fields[string_key].is_multivalued:
-                            if value is None or len(value) == 0:
+                            if value is None or len(value) is 0:
                                 additional_fields[string_key] = []
                             else:
                                 additional_fields[string_key] = value.split(",")
@@ -783,8 +746,8 @@ class WhooshSearchBackend(BaseSearchBackend):
                     else:
                         additional_fields[string_key] = self._to_python(value)
 
-                del additional_fields[DJANGO_CT]
-                del additional_fields[DJANGO_ID]
+                del (additional_fields[DJANGO_CT])
+                del (additional_fields[DJANGO_ID])
 
                 if highlight:
                     sa = StemmingAnalyzer()
@@ -830,7 +793,7 @@ class WhooshSearchBackend(BaseSearchBackend):
         spelling_suggestion = None
         reader = self.index.reader()
         corrector = reader.corrector(self.content_field_name)
-        cleaned_query = force_str(query_string)
+        cleaned_query = force_text(query_string)
 
         if not query_string:
             return spelling_suggestion
@@ -870,12 +833,12 @@ class WhooshSearchBackend(BaseSearchBackend):
             else:
                 value = "false"
         elif isinstance(value, (list, tuple)):
-            value = ",".join([force_str(v) for v in value])
-        elif isinstance(value, (int, float)):
+            value = ",".join([force_text(v) for v in value])
+        elif isinstance(value, (six.integer_types, float)):
             # Leave it alone.
             pass
         else:
-            value = force_str(value)
+            value = force_text(value)
         return value
 
     def _to_python(self, value):
@@ -889,7 +852,7 @@ class WhooshSearchBackend(BaseSearchBackend):
         elif value == "false":
             return False
 
-        if value and isinstance(value, str):
+        if value and isinstance(value, six.string_types):
             possible_datetime = DATETIME_REGEX.search(value)
 
             if possible_datetime:
@@ -914,10 +877,10 @@ class WhooshSearchBackend(BaseSearchBackend):
             # Try to handle most built-in types.
             if isinstance(
                 converted_value,
-                (list, tuple, set, dict, int, float, complex),
+                (list, tuple, set, dict, six.integer_types, float, complex),
             ):
                 return converted_value
-        except Exception:
+        except:
             # If it fails (SyntaxError or its ilk) or we don't trust it,
             # continue on.
             pass
@@ -928,9 +891,9 @@ class WhooshSearchBackend(BaseSearchBackend):
 class WhooshSearchQuery(BaseSearchQuery):
     def _convert_datetime(self, date):
         if hasattr(date, "hour"):
-            return force_str(date.strftime("%Y%m%d%H%M%S"))
+            return force_text(date.strftime("%Y%m%d%H%M%S"))
         else:
-            return force_str(date.strftime("%Y%m%d000000"))
+            return force_text(date.strftime("%Y%m%d000000"))
 
     def clean(self, query_fragment):
         """
@@ -971,7 +934,7 @@ class WhooshSearchQuery(BaseSearchQuery):
             if hasattr(value, "strftime"):
                 is_datetime = True
 
-            if isinstance(value, str) and value != " ":
+            if isinstance(value, six.string_types) and value != " ":
                 # It's not an ``InputType``. Assume ``Clean``.
                 value = Clean(value)
             else:
@@ -1022,7 +985,7 @@ class WhooshSearchQuery(BaseSearchQuery):
                     # Iterate over terms & incorportate the converted form of each into the query.
                     terms = []
 
-                    if isinstance(prepared_value, str):
+                    if isinstance(prepared_value, six.string_types):
                         possible_values = prepared_value.split(" ")
                     else:
                         if is_datetime is True:
@@ -1031,19 +994,23 @@ class WhooshSearchQuery(BaseSearchQuery):
                         possible_values = [prepared_value]
 
                     for possible_value in possible_values:
-                        possible_value_str = self.backend._from_python(possible_value)
+                        possible_value_str = self.backend._from_python(
+                            possible_value
+                        )
                         if filter_type == "fuzzy":
                             terms.append(
-                                filter_types[filter_type]
-                                % (
+                                filter_types[filter_type] % (
                                     possible_value_str,
                                     min(
-                                        FUZZY_WHOOSH_MIN_PREFIX, len(possible_value_str)
-                                    ),
+                                        FUZZY_WHOOSH_MIN_PREFIX,
+                                        len(possible_value_str)
+                                    )
                                 )
                             )
                         else:
-                            terms.append(filter_types[filter_type] % possible_value_str)
+                            terms.append(
+                                filter_types[filter_type] % possible_value_str
+                            )
 
                     if len(terms) == 1:
                         query_frag = terms[0]
@@ -1063,7 +1030,7 @@ class WhooshSearchQuery(BaseSearchQuery):
                     if is_datetime is True:
                         pv = self._convert_datetime(pv)
 
-                    if isinstance(pv, str) and not is_datetime:
+                    if isinstance(pv, six.string_types) and not is_datetime:
                         in_options.append('"%s"' % pv)
                     else:
                         in_options.append("%s" % pv)

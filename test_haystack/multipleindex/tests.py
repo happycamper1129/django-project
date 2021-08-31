@@ -1,3 +1,7 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django.db import models
 
 from haystack import connections
@@ -12,7 +16,7 @@ from .search_indexes import BarIndex, FooIndex
 
 class MultipleIndexTestCase(WhooshTestCase):
     def setUp(self):
-        super().setUp()
+        super(MultipleIndexTestCase, self).setUp()
 
         self.ui = connections["solr"].get_unified_index()
         self.fi = self.ui.get_index(Foo)
@@ -43,7 +47,7 @@ class MultipleIndexTestCase(WhooshTestCase):
     def tearDown(self):
         self.fi.clear(using="solr")
         self.bi.clear(using="solr")
-        super().tearDown()
+        super(MultipleIndexTestCase, self).tearDown()
 
     def test_index_update_object_using(self):
         results = self.solr_backend.search("foo")
@@ -183,16 +187,16 @@ class MultipleIndexTestCase(WhooshTestCase):
 class TestSignalProcessor(BaseSignalProcessor):
     def setup(self):
         self.setup_ran = True
-        super().setup()
+        super(TestSignalProcessor, self).setup()
 
     def teardown(self):
         self.teardown_ran = True
-        super().teardown()
+        super(TestSignalProcessor, self).teardown()
 
 
 class SignalProcessorTestCase(WhooshTestCase):
     def setUp(self):
-        super().setUp()
+        super(SignalProcessorTestCase, self).setUp()
 
         # Blatantly wrong data, just for assertion purposes.
         self.fake_connections = {}
@@ -219,7 +223,7 @@ class SignalProcessorTestCase(WhooshTestCase):
     def tearDown(self):
         self.fi.clear(using="solr")
         self.bi.clear(using="solr")
-        super().tearDown()
+        super(SignalProcessorTestCase, self).tearDown()
 
     def test_init(self):
         tsp = TestSignalProcessor(self.fake_connections, self.fake_router)

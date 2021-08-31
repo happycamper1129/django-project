@@ -1,3 +1,7 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -16,7 +20,7 @@ class SearchModelAdminTestCase(TestCase):
     fixtures = ["base_data.json", "bulk_data.json"]
 
     def setUp(self):
-        super().setUp()
+        super(SearchModelAdminTestCase, self).setUp()
 
         # With the models setup, you get the proper bits.
         # Stow.
@@ -39,7 +43,7 @@ class SearchModelAdminTestCase(TestCase):
     def tearDown(self):
         # Restore.
         connections["solr"]._index = self.old_ui
-        super().tearDown()
+        super(SearchModelAdminTestCase, self).tearDown()
 
     def test_usage(self):
         reset_search_queries()

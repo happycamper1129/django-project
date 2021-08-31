@@ -1,7 +1,11 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django import forms
 from django.utils.encoding import smart_text
 from django.utils.text import capfirst
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import ugettext_lazy as _
 
 from haystack import connections
 from haystack.constants import DEFAULT_ALIAS
@@ -32,7 +36,7 @@ class SearchForm(forms.Form):
         if self.searchqueryset is None:
             self.searchqueryset = SearchQuerySet()
 
-        super().__init__(*args, **kwargs)
+        super(SearchForm, self).__init__(*args, **kwargs)
 
     def no_query_found(self):
         """
@@ -68,16 +72,16 @@ class SearchForm(forms.Form):
 
 class HighlightedSearchForm(SearchForm):
     def search(self):
-        return super().search().highlight()
+        return super(HighlightedSearchForm, self).search().highlight()
 
 
 class FacetedSearchForm(SearchForm):
     def __init__(self, *args, **kwargs):
         self.selected_facets = kwargs.pop("selected_facets", [])
-        super().__init__(*args, **kwargs)
+        super(FacetedSearchForm, self).__init__(*args, **kwargs)
 
     def search(self):
-        sqs = super().search()
+        sqs = super(FacetedSearchForm, self).search()
 
         # We need to process each facet to ensure that the field name and the
         # value are quoted correctly and separately:
@@ -95,7 +99,7 @@ class FacetedSearchForm(SearchForm):
 
 class ModelSearchForm(SearchForm):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(ModelSearchForm, self).__init__(*args, **kwargs)
         self.fields["models"] = forms.MultipleChoiceField(
             choices=model_choices(),
             required=False,
@@ -114,20 +118,20 @@ class ModelSearchForm(SearchForm):
         return search_models
 
     def search(self):
-        sqs = super().search()
+        sqs = super(ModelSearchForm, self).search()
         return sqs.models(*self.get_models())
 
 
 class HighlightedModelSearchForm(ModelSearchForm):
     def search(self):
-        return super().search().highlight()
+        return super(HighlightedModelSearchForm, self).search().highlight()
 
 
 class FacetedModelSearchForm(ModelSearchForm):
     selected_facets = forms.CharField(required=False, widget=forms.HiddenInput)
 
     def search(self):
-        sqs = super().search()
+        sqs = super(FacetedModelSearchForm, self).search()
 
         if hasattr(self, "cleaned_data") and self.cleaned_data["selected_facets"]:
             sqs = sqs.narrow(self.cleaned_data["selected_facets"])

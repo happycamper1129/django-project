@@ -15,7 +15,7 @@ Engine
   engine with (i.e. Whoosh_)
 
 .. _Solr: http://lucene.apache.org/solr/
-.. _Whoosh: https://github.com/mchaput/whoosh/
+.. _Whoosh: https://bitbucket.org/mchaput/whoosh/
 
 Index
   The datastore used by the engine is called an index. Its structure can vary

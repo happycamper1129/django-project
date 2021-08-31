@@ -1,3 +1,7 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import datetime
 
 from haystack import connections
@@ -11,7 +15,7 @@ from .testcases import WhooshTestCase
 
 class WhooshSearchQueryTestCase(WhooshTestCase):
     def setUp(self):
-        super().setUp()
+        super(WhooshSearchQueryTestCase, self).setUp()
 
         self.sq = connections["whoosh"].get_query()
 
@@ -158,7 +162,7 @@ class WhooshSearchQueryTestCase(WhooshTestCase):
         self.assertTrue(issubclass(self.sq.result_class, SearchResult))
 
         # Custom class.
-        class IttyBittyResult:
+        class IttyBittyResult(object):
             pass
 
         self.sq.set_result_class(IttyBittyResult)

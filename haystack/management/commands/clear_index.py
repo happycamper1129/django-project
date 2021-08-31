@@ -1,10 +1,15 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django.core.management.base import BaseCommand
+from django.utils import six
 
 from haystack import connections
 
 
 class Command(BaseCommand):
-    help = "Clears out the search index completely."  # noqa A003
+    help = "Clears out the search index completely."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -48,7 +53,7 @@ class Command(BaseCommand):
                 "Your choices after this are to restore from backups or rebuild via the `rebuild_index` command."
             )
 
-            yes_or_no = input("Are you sure you wish to continue? [y/N] ")
+            yes_or_no = six.moves.input("Are you sure you wish to continue? [y/N] ")
 
             if not yes_or_no.lower().startswith("y"):
                 self.stdout.write("No action taken.")

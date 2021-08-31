@@ -1,9 +1,14 @@
+# encoding: utf-8
+
 # "Hey, Django! Look at me, I'm an app! For Serious!"
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django.core.exceptions import ObjectDoesNotExist
-from django.utils.encoding import force_str
+from django.utils import six
+from django.utils.encoding import force_text
 from django.utils.text import capfirst
 
-from haystack.constants import DEFAULT_ALIAS
 from haystack.exceptions import NotHandled, SpatialError
 from haystack.utils import log as logging
 from haystack.utils.app_loading import haystack_get_model
@@ -16,7 +21,7 @@ except ImportError:
 
 # Not a Django model, but tightly tied to them and there doesn't seem to be a
 # better spot in the tree.
-class SearchResult:
+class SearchResult(object):
     """
     A single search result. The actual object is loaded lazily by accessing
     object; until then this object only stores the model, pk, and score.
@@ -54,8 +59,8 @@ class SearchResult:
             self.pk,
         )
 
-    def __str__(self):
-        return force_str(self.__repr__())
+    def __unicode__(self):
+        return force_text(self.__repr__())
 
     def __getattr__(self, attr):
         if attr == "__getnewargs__":
@@ -66,7 +71,7 @@ class SearchResult:
     def _get_searchindex(self):
         from haystack import connections
 
-        return connections[DEFAULT_ALIAS].get_unified_index().get_index(self.model)
+        return connections["default"].get_unified_index().get_index(self.model)
 
     searchindex = property(_get_searchindex)
 
@@ -98,7 +103,7 @@ class SearchResult:
     def _set_object(self, obj):
         self._object = obj
 
-    object = property(_get_object, _set_object)  # noqa A003
+    object = property(_get_object, _set_object)
 
     def _get_model(self):
         if self._model is None:
@@ -164,7 +169,7 @@ class SearchResult:
             self.log.error("Model could not be found for SearchResult '%s'.", self)
             return ""
 
-        return force_str(capfirst(self.model._meta.verbose_name))
+        return force_text(capfirst(self.model._meta.verbose_name))
 
     verbose_name = property(_get_verbose_name)
 
@@ -173,7 +178,7 @@ class SearchResult:
             self.log.error("Model could not be found for SearchResult '%s'.", self)
             return ""
 
-        return force_str(capfirst(self.model._meta.verbose_name_plural))
+        return force_text(capfirst(self.model._meta.verbose_name_plural))
 
     verbose_name_plural = property(_get_verbose_name_plural)
 
@@ -183,7 +188,7 @@ class SearchResult:
             self.log.error("Model could not be found for SearchResult '%s'.", self)
             return ""
 
-        return str(self.model._meta)
+        return six.text_type(self.model._meta)
 
     def get_additional_fields(self):
         """
@@ -211,9 +216,7 @@ class SearchResult:
             from haystack import connections
 
             try:
-                index = (
-                    connections[DEFAULT_ALIAS].get_unified_index().get_index(self.model)
-                )
+                index = connections["default"].get_unified_index().get_index(self.model)
             except NotHandled:
                 # Not found? Return nothing.
                 return {}
@@ -236,7 +239,7 @@ class SearchResult:
         # The ``log`` is excluded because, under the hood, ``logging`` uses
         # ``threading.Lock``, which doesn't pickle well.
         ret_dict = self.__dict__.copy()
-        del ret_dict["log"]
+        del (ret_dict["log"])
         return ret_dict
 
     def __setstate__(self, data_dict):

@@ -1,9 +1,14 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import copy
 import threading
 import warnings
 
 from django.core.exceptions import ImproperlyConfigured
-from django.utils.encoding import force_str
+from django.utils.encoding import force_text
+from django.utils.six import with_metaclass
 
 from haystack import connection_router, connections
 from haystack.constants import Indexable  # NOQA — exposed as a public export
@@ -16,7 +21,6 @@ from haystack.fields import (  # NOQA — exposed as a public export
     DecimalField,
     EdgeNgramField,
     FacetCharField,
-    FacetDateField,
     FacetDateTimeField,
     FacetIntegerField,
     FloatField,
@@ -91,7 +95,7 @@ class DeclarativeMetaclass(type):
         return super(DeclarativeMetaclass, cls).__new__(cls, name, bases, attrs)
 
 
-class SearchIndex(threading.local, metaclass=DeclarativeMetaclass):
+class SearchIndex(with_metaclass(DeclarativeMetaclass, threading.local)):
     """
     Base class for building indexes.
 
@@ -118,7 +122,7 @@ class SearchIndex(threading.local, metaclass=DeclarativeMetaclass):
         self.prepared_data = None
         content_fields = []
 
-        self.field_map = {}
+        self.field_map = dict()
         for field_name, field in self.fields.items():
             # form field map
             self.field_map[field.index_fieldname] = field_name
@@ -217,7 +221,7 @@ class SearchIndex(threading.local, metaclass=DeclarativeMetaclass):
         self.prepared_data = {
             ID: get_identifier(obj),
             DJANGO_CT: get_model_ct(self.get_model()),
-            DJANGO_ID: force_str(obj.pk),
+            DJANGO_ID: force_text(obj.pk),
         }
 
         for field_name, field in self.fields.items():
@@ -231,17 +235,11 @@ class SearchIndex(threading.local, metaclass=DeclarativeMetaclass):
 
         return self.prepared_data
 
-    def full_prepare(self, obj, with_string_facet=True):
+    def full_prepare(self, obj):
         self.prepared_data = self.prepare(obj)
 
         for field_name, field in self.fields.items():
             # Duplicate data for faceted fields.
-            if (
-                not with_string_facet
-                and field.field_type == "string"
-                and getattr(field, "facet_for", None) in self.fields
-            ):
-                continue
             if getattr(field, "facet_for", None):
                 source_field_name = self.fields[field.facet_for].index_fieldname
 
@@ -258,13 +256,13 @@ class SearchIndex(threading.local, metaclass=DeclarativeMetaclass):
             # Remove any fields that lack a value and are ``null=True``.
             if field.null is True:
                 if self.prepared_data[field.index_fieldname] is None:
-                    del self.prepared_data[field.index_fieldname]
+                    del (self.prepared_data[field.index_fieldname])
 
         return self.prepared_data
 
     def get_content_field(self):
         """Returns the field that supplies the primary document to be indexed."""
-        for _, field in self.fields.items():
+        for field_name, field in self.fields.items():
             if field.document is True:
                 return field.index_fieldname
 
@@ -451,7 +449,7 @@ class ModelSearchIndex(SearchIndex):
     fields_to_skip = (ID, DJANGO_CT, DJANGO_ID, "content", "text")
 
     def __init__(self, extra_field_kwargs=None):
-        super().__init__()
+        super(ModelSearchIndex, self).__init__()
 
         self.model = None
 

@@ -1,15 +1,17 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import datetime
 import logging as std_logging
 import os
-import pickle
 import unittest
 from decimal import Decimal
-from unittest.mock import patch
 
 import pysolr
 from django.conf import settings
 from django.test import TestCase
 from django.test.utils import override_settings
+from mock import patch
 from pkg_resources import parse_version
 
 from haystack import connections, indexes, reset_search_queries
@@ -21,6 +23,16 @@ from haystack.utils.loading import UnifiedIndex
 
 from ..core.models import AFourthMockModel, AnotherMockModel, ASixthMockModel, MockModel
 from ..mocks import MockSearchResult
+
+test_pickling = True
+
+try:
+    import cPickle as pickle
+except ImportError:
+    try:
+        import pickle
+    except ImportError:
+        test_pickling = False
 
 
 def clear_solr_index():
@@ -124,7 +136,7 @@ class SolrRoundTripSearchIndex(indexes.SearchIndex, indexes.Indexable):
         return MockModel
 
     def prepare(self, obj):
-        prepped = super().prepare(obj)
+        prepped = super(SolrRoundTripSearchIndex, self).prepare(obj)
         prepped.update(
             {
                 "text": "This is some example text.",
@@ -191,7 +203,7 @@ class SolrQuotingMockSearchIndex(indexes.SearchIndex, indexes.Indexable):
 
 class SolrSearchBackendTestCase(TestCase):
     def setUp(self):
-        super().setUp()
+        super(SolrSearchBackendTestCase, self).setUp()
 
         # Wipe it clean.
         self.raw_solr = pysolr.Solr(settings.HAYSTACK_CONNECTIONS["solr"]["URL"])
@@ -220,7 +232,7 @@ class SolrSearchBackendTestCase(TestCase):
 
     def tearDown(self):
         connections["solr"]._index = self.old_ui
-        super().tearDown()
+        super(SolrSearchBackendTestCase, self).tearDown()
 
     def test_non_silent(self):
         bad_sb = connections["solr"].backend(
@@ -267,7 +279,7 @@ class SolrSearchBackendTestCase(TestCase):
                     "django_ct": "core.mockmodel",
                     "name": "daniel1",
                     "name_exact": "daniel1",
-                    "text": "Indexed!\n1\n",
+                    "text": "Indexed!\n1",
                     "pub_date": "2009-02-24T00:00:00Z",
                     "id": "core.mockmodel.1",
                 },
@@ -276,7 +288,7 @@ class SolrSearchBackendTestCase(TestCase):
                     "django_ct": "core.mockmodel",
                     "name": "daniel2",
                     "name_exact": "daniel2",
-                    "text": "Indexed!\n2\n",
+                    "text": "Indexed!\n2",
                     "pub_date": "2009-02-23T00:00:00Z",
                     "id": "core.mockmodel.2",
                 },
@@ -285,7 +297,7 @@ class SolrSearchBackendTestCase(TestCase):
                     "django_ct": "core.mockmodel",
                     "name": "daniel3",
                     "name_exact": "daniel3",
-                    "text": "Indexed!\n3\n",
+                    "text": "Indexed!\n3",
                     "pub_date": "2009-02-22T00:00:00Z",
                     "id": "core.mockmodel.3",
                 },
@@ -321,7 +333,7 @@ class SolrSearchBackendTestCase(TestCase):
                     "django_ct": "core.mockmodel",
                     "name": "daniel2",
                     "name_exact": "daniel2",
-                    "text": "Indexed!\n2\n",
+                    "text": "Indexed!\n2",
                     "pub_date": "2009-02-23T00:00:00Z",
                     "id": "core.mockmodel.2",
                 },
@@ -330,7 +342,7 @@ class SolrSearchBackendTestCase(TestCase):
                     "django_ct": "core.mockmodel",
                     "name": "daniel3",
                     "name_exact": "daniel3",
-                    "text": "Indexed!\n3\n",
+                    "text": "Indexed!\n3",
                     "pub_date": "2009-02-22T00:00:00Z",
                     "id": "core.mockmodel.3",
                 },
@@ -400,11 +412,7 @@ class SolrSearchBackendTestCase(TestCase):
                 result.highlighted["text"][0]
                 for result in self.sb.search("Index", highlight=True)["results"]
             ],
-            [
-                "<em>Indexed</em>!\n1\n",
-                "<em>Indexed</em>!\n2\n",
-                "<em>Indexed</em>!\n3\n",
-            ],
+            ["<em>Indexed</em>!\n1", "<em>Indexed</em>!\n2", "<em>Indexed</em>!\n3"],
         )
 
         # shortened highlighting options
@@ -432,7 +440,7 @@ class SolrSearchBackendTestCase(TestCase):
                     "results"
                 ]
             ],
-            ["<i>Indexed</i>!\n1\n", "<i>Indexed</i>!\n2\n", "<i>Indexed</i>!\n3\n"],
+            ["<i>Indexed</i>!\n1", "<i>Indexed</i>!\n2", "<i>Indexed</i>!\n3"],
         )
 
         self.assertEqual(self.sb.search("Indx")["hits"], 0)
@@ -865,7 +873,7 @@ class LiveSolrSearchQueryTestCase(TestCase):
     fixtures = ["base_data.json"]
 
     def setUp(self):
-        super().setUp()
+        super(LiveSolrSearchQueryTestCase, self).setUp()
 
         # Wipe it clean.
         clear_solr_index()
@@ -884,7 +892,7 @@ class LiveSolrSearchQueryTestCase(TestCase):
 
     def tearDown(self):
         connections["solr"]._index = self.old_ui
-        super().tearDown()
+        super(LiveSolrSearchQueryTestCase, self).tearDown()
 
     def test_get_spelling(self):
         self.sq.add_filter(SQ(content="Indexy"))
@@ -938,16 +946,16 @@ class LiveSolrSearchQuerySetTestCase(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        super().setUpClass()
+        super(LiveSolrSearchQuerySetTestCase, cls).setUpClass()
         cls._index_updated = False
 
     @classmethod
     def tearDownClass(cls):
         del cls._index_updated
-        super().tearDownClass()
+        super(LiveSolrSearchQuerySetTestCase, cls).tearDownClass()
 
     def setUp(self):
-        super().setUp()
+        super(LiveSolrSearchQuerySetTestCase, self).setUp()
 
         # Stow.
         self.old_ui = connections["solr"].get_unified_index()
@@ -973,7 +981,7 @@ class LiveSolrSearchQuerySetTestCase(TestCase):
     def tearDown(self):
         # Restore.
         connections["solr"]._index = self.old_ui
-        super().tearDown()
+        super(LiveSolrSearchQuerySetTestCase, self).tearDown()
 
     def test_load_all(self):
         sqs = self.sqs.load_all()
@@ -1361,7 +1369,7 @@ class LiveSolrMoreLikeThisTestCase(TestCase):
     fixtures = ["base_data.json", "bulk_data.json"]
 
     def setUp(self):
-        super().setUp()
+        super(LiveSolrMoreLikeThisTestCase, self).setUp()
 
         # Wipe it clean.
         clear_solr_index()
@@ -1381,7 +1389,7 @@ class LiveSolrMoreLikeThisTestCase(TestCase):
     def tearDown(self):
         # Restore.
         connections["solr"]._index = self.old_ui
-        super().tearDown()
+        super(LiveSolrMoreLikeThisTestCase, self).tearDown()
 
     def test_more_like_this(self):
         all_mlt = self.sqs.more_like_this(MockModel.objects.get(pk=1))
@@ -1448,7 +1456,7 @@ class LiveSolrAutocompleteTestCase(TestCase):
     fixtures = ["base_data.json", "bulk_data.json"]
 
     def setUp(self):
-        super().setUp()
+        super(LiveSolrAutocompleteTestCase, self).setUp()
 
         # Wipe it clean.
         clear_solr_index()
@@ -1467,7 +1475,7 @@ class LiveSolrAutocompleteTestCase(TestCase):
     def tearDown(self):
         # Restore.
         connections["solr"]._index = self.old_ui
-        super().tearDown()
+        super(LiveSolrAutocompleteTestCase, self).tearDown()
 
     def test_autocomplete(self):
         autocomplete = self.sqs.autocomplete(text_auto="mod")
@@ -1508,7 +1516,7 @@ class LiveSolrAutocompleteTestCase(TestCase):
 
 class LiveSolrRoundTripTestCase(TestCase):
     def setUp(self):
-        super().setUp()
+        super(LiveSolrRoundTripTestCase, self).setUp()
 
         # Wipe it clean.
         clear_solr_index()
@@ -1531,7 +1539,7 @@ class LiveSolrRoundTripTestCase(TestCase):
     def tearDown(self):
         # Restore.
         connections["solr"]._index = self.old_ui
-        super().tearDown()
+        super(LiveSolrRoundTripTestCase, self).tearDown()
 
     def test_round_trip(self):
         results = self.sqs.filter(id="core.mockmodel.1")
@@ -1554,11 +1562,12 @@ class LiveSolrRoundTripTestCase(TestCase):
         self.assertEqual(result.sites, [3, 5, 1])
 
 
+@unittest.skipUnless(test_pickling, "Skipping pickling tests")
 class LiveSolrPickleTestCase(TestCase):
     fixtures = ["base_data.json", "bulk_data.json"]
 
     def setUp(self):
-        super().setUp()
+        super(LiveSolrPickleTestCase, self).setUp()
 
         # Wipe it clean.
         clear_solr_index()
@@ -1579,7 +1588,7 @@ class LiveSolrPickleTestCase(TestCase):
     def tearDown(self):
         # Restore.
         connections["solr"]._index = self.old_ui
-        super().tearDown()
+        super(LiveSolrPickleTestCase, self).tearDown()
 
     def test_pickling(self):
         results = self.sqs.all()
@@ -1596,7 +1605,7 @@ class LiveSolrPickleTestCase(TestCase):
 
 class SolrBoostBackendTestCase(TestCase):
     def setUp(self):
-        super().setUp()
+        super(SolrBoostBackendTestCase, self).setUp()
 
         # Wipe it clean.
         self.raw_solr = pysolr.Solr(settings.HAYSTACK_CONNECTIONS["solr"]["URL"])
@@ -1628,7 +1637,7 @@ class SolrBoostBackendTestCase(TestCase):
 
     def tearDown(self):
         connections["solr"]._index = self.old_ui
-        super().tearDown()
+        super(SolrBoostBackendTestCase, self).tearDown()
 
     def test_boost(self):
         self.sb.update(self.smmi, self.sample_objs)
@@ -1655,7 +1664,7 @@ class SolrBoostBackendTestCase(TestCase):
 )
 class LiveSolrContentExtractionTestCase(TestCase):
     def setUp(self):
-        super().setUp()
+        super(LiveSolrContentExtractionTestCase, self).setUp()
 
         self.sb = connections["solr"].get_backend()
 

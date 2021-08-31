@@ -1,3 +1,7 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import os
 from tempfile import mkdtemp
 
@@ -13,7 +17,6 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
-    "django.contrib.messages",
     "haystack",
     "test_haystack.discovery",
     "test_haystack.core",
@@ -33,10 +36,7 @@ TEMPLATES = [
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "APP_DIRS": True,
         "OPTIONS": {
-            "context_processors": [
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
-            ]
+            "context_processors": ["django.contrib.auth.context_processors.auth"]
         },
     }
 ]
@@ -101,12 +101,6 @@ if "elasticsearch" in HAYSTACK_CONNECTIONS:
             HAYSTACK_CONNECTIONS["elasticsearch"].update(
                 {
                     "ENGINE": "haystack.backends.elasticsearch5_backend.Elasticsearch5SearchEngine"
-                }
-            )
-        elif (7,) <= elasticsearch.__version__ <= (8,):
-            HAYSTACK_CONNECTIONS["elasticsearch"].update(
-                {
-                    "ENGINE": "haystack.backends.elasticsearch7_backend.Elasticsearch7SearchEngine"
                 }
             )
     except ImportError:

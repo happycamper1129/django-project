@@ -1,3 +1,7 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django.test import TestCase
 
 from haystack import connections, inputs
@@ -5,7 +9,7 @@ from haystack import connections, inputs
 
 class InputTestCase(TestCase):
     def setUp(self):
-        super().setUp()
+        super(InputTestCase, self).setUp()
         self.query_obj = connections["default"].get_query()
 
     def test_raw_init(self):

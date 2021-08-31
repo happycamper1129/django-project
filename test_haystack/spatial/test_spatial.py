@@ -1,3 +1,7 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django.contrib.gis.measure import D
 from django.test import TestCase
 
@@ -104,7 +108,7 @@ class SpatialSolrTestCase(TestCase):
     def setUp(self):
         from django.contrib.gis.geos import Point
 
-        super().setUp()
+        super(SpatialSolrTestCase, self).setUp()
         self.ui = connections[self.using].get_unified_index()
         self.checkindex = self.ui.get_index(Checkin)
         self.checkindex.reindex(using=self.using)
@@ -118,7 +122,7 @@ class SpatialSolrTestCase(TestCase):
 
     def tearDown(self):
         self.checkindex.clear(using=self.using)
-        super().setUp()
+        super(SpatialSolrTestCase, self).setUp()
 
     def test_indexing(self):
         # Make sure the indexed data looks correct.

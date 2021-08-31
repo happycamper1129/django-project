@@ -1,3 +1,7 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import os
 
 import requests
@@ -11,11 +15,7 @@ from haystack.backends.solr_backend import SolrSearchBackend
 
 
 class Command(BaseCommand):
-    help = (  # noqa A003
-        "Generates a Solr schema that reflects the indexes using templates "
-        " under a django template dir 'search_configuration/*.xml'.  If none are "
-        " found, then provides defaults suitable to Solr 6.4"
-    )
+    help = "Generates a Solr schema that reflects the indexes using templates " " under a django template dir 'search_configuration/*.xml'.  If none are " " found, then provides defaults suitable to Solr 6.4"
     schema_template_loc = "search_configuration/schema.xml"
     solrcfg_template_loc = "search_configuration/solrconfig.xml"
 
@@ -85,7 +85,7 @@ class Command(BaseCommand):
             if os.path.isfile(managed_schema_path):
                 try:
                     os.rename(managed_schema_path, "%s.old" % managed_schema_path)
-                except OSError as exc:
+                except (IOError, OSError) as exc:
                     raise CommandError(
                         "Could not rename old managed schema file {}: {}".format(
                             managed_schema_path, exc
